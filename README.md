@@ -1,4 +1,4 @@
-# 🌱 PlantPulse
+# 🌱 PlantPulse.
 
 **PlantPulse** es un sistema de monitoreo inteligente orientado al cuidado de plantas, que permite visualizar y analizar variables ambientales como la humedad del suelo, la temperatura y la luz en tiempo real.
 
@@ -6,25 +6,22 @@ El proyecto simula un entorno IoT, integrando componentes de software que repres
 
 ---
 
-## 🚀 Funcionalidades
+## 🚀 Funcionalidades.
 
-- 📊 Monitoreo en tiempo real de variables ambientales  
-- 🌿 Gestión de plantas (crear, editar, eliminar)  
-- 📈 Visualización de datos históricos y gráficos  
-- ⚠️ Generación de alertas ante condiciones críticas  
-- 💡 Recomendaciones para el cuidado de plantas  
-- 🔐 Autenticación de usuarios  
+- 📊 Monitoreo en tiempo real de variables ambientales.  
+- 🌿 Gestión de plantas (crear, editar, eliminar).  
+- 📈 Visualización de datos históricos y gráficos.  
+- ⚠️ Generación de alertas ante condiciones críticas.  
+- 💡 Recomendaciones para el cuidado de plantas.  
+- 🔐 Autenticación de usuarios.  
 
 ---
 
-## 🏗️ Arquitectura
+## 🏗️ Arquitectura.
 
 El sistema sigue una arquitectura basada en flujo de datos:
 
-Sensores (simulados) → Backend → Base de Datos → Frontend
-
-
-Actualmente, los datos son simulados para representar el comportamiento de sensores reales.
+Sensores  → Backend → Base de Datos → Frontend
 
 ---
 
@@ -32,7 +29,7 @@ Actualmente, los datos son simulados para representar el comportamiento de senso
 
 - **Frontend:** React / HTML / CSS / JavaScript  
 - **Backend:** Node.js 
-- **Base de datos:** MySQL  
+- **Base de datos:** Microsoft SQL Server
 - **Modelado:** UML (casos de uso, clases, diagramas de flujo)  
 
 ---
@@ -73,8 +70,6 @@ Actualmente incluye:
 Interfaz funcional
 
 Modelado UML
-
-Simulación de datos en tiempo real
 
 Lógica básica de monitoreo
 
