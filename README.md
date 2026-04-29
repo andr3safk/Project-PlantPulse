@@ -58,6 +58,7 @@ npm install
 
 # Ejecutar proyecto
 npm start
+```
 
 🎯 Objetivo
 Desarrollar una plataforma que facilite el monitoreo y cuidado de plantas mediante el uso de tecnologías digitales, mejorando la toma de decisiones del usuario y promoviendo prácticas sostenibles.
