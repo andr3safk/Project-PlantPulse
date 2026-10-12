@@ -1,4 +1,35 @@
-node_modules
-dist
+# Dependencias
+node_modules/
+
+# Compilaciones
+dist/
+build/
+
+# Variables de entorno: nunca se suben (contienen contraseñas y secretos)
 .env
-.env.local
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Reportes de pruebas
+coverage/
+
+# Respaldos de SQL Server
+*.bak
+
+# ESP32 (PlatformIO)
+.pio/
+
+# Sistema operativo
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editores
+.vscode/*
+!.vscode/extensions.json
+.idea/
