@@ -3,25 +3,57 @@ import { Droplets, Sun, Thermometer, Wind, AlertCircle, CheckCircle2, Trash2, Ed
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
 import { usePlants, Plant } from "./contexts/PlantContext";
+import { validarPlanta, normalizarTexto, type DatosPlanta, type ErroresPlanta } from "./utils/validarPlanta";
 
 export function Dashboard() {
   const { plants, deletePlant, updatePlant } = usePlants();
+  // editingPlant guarda la planta original; editForm, los valores que el usuario está editando.
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
+  const [editForm, setEditForm] = useState<DatosPlanta>({ name: "", species: "" });
+  const [editErrors, setEditErrors] = useState<ErroresPlanta>({});
   const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
 
   const healthyCount = plants.filter(p => p.status === 'healthy').length;
   const warningCount = plants.filter(p => p.status === 'warning').length;
 
+  const editHasChanges = editingPlant !== null && (
+    normalizarTexto(editForm.name) !== normalizarTexto(editingPlant.name) ||
+    normalizarTexto(editForm.species) !== normalizarTexto(editingPlant.species)
+  );
+
+  const openEditModal = (plant: Plant) => {
+    setEditingPlant(plant);
+    setEditForm({ name: plant.name, species: plant.species });
+    setEditErrors({});
+  };
+
+  const closeEditModal = () => {
+    setEditingPlant(null);
+    setEditErrors({});
+  };
+
+  const handleEditChange = (field: keyof DatosPlanta, value: string) => {
+    setEditForm(prev => ({ ...prev, [field]: value }));
+    // El error del campo desaparece en cuanto el usuario lo corrige; se vuelve a validar al enviar.
+    setEditErrors(prev => ({ ...prev, [field]: undefined }));
+  };
+
   const handleEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (editingPlant) {
-      updatePlant(editingPlant.id, {
-        name: editingPlant.name,
-        species: editingPlant.species,
-      });
-      setEditingPlant(null);
+    if (!editingPlant) return;
+
+    const errors = validarPlanta(editForm);
+    if (Object.keys(errors).length > 0) {
+      setEditErrors(errors);
+      return;
     }
+
+    updatePlant(editingPlant.id, {
+      name: normalizarTexto(editForm.name),
+      species: normalizarTexto(editForm.species),
+    });
+    closeEditModal();
   };
 
   const confirmDelete = () => {
@@ -62,7 +94,7 @@ export function Dashboard() {
           <PlantCard 
             key={plant.id} 
             plant={plant} 
-            onEdit={() => setEditingPlant(plant)}
+            onEdit={() => openEditModal(plant)}
             onDelete={() => setPlantToDelete(plant)}
             onViewDetails={() => setDetailsPlant(plant)}
           />
@@ -75,46 +107,67 @@ export function Dashboard() {
           <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800 shadow-xl">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Editar Planta</h2>
-              <button 
-                onClick={() => setEditingPlant(null)}
+              <button
+                type="button"
+                onClick={closeEditModal}
+                aria-label="Cerrar"
                 className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 rounded-full"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} className="space-y-4">
+            {/* noValidate: los mensajes los muestra validarPlanta, no el globo nativo del navegador */}
+            <form onSubmit={handleEditSubmit} noValidate className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre</label>
-                <input 
+                <label htmlFor="edit-plant-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre</label>
+                <input
+                  id="edit-plant-name"
                   type="text"
-                  value={editingPlant.name}
-                  onChange={e => setEditingPlant({...editingPlant, name: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800 dark:text-slate-100"
+                  value={editForm.name}
+                  onChange={e => handleEditChange("name", e.target.value)}
+                  aria-invalid={editErrors.name ? true : undefined}
+                  aria-describedby={editErrors.name ? "edit-plant-name-error" : undefined}
+                  className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 outline-none text-slate-800 dark:text-slate-100 ${editErrors.name ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 dark:border-slate-700 focus:ring-emerald-500/20 focus:border-emerald-500"}`}
                   required
                 />
+                {editErrors.name && (
+                  <p id="edit-plant-name-error" role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {editErrors.name}
+                  </p>
+                )}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Especie</label>
-                <input 
+                <label htmlFor="edit-plant-species" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Especie</label>
+                <input
+                  id="edit-plant-species"
                   type="text"
-                  value={editingPlant.species}
-                  onChange={e => setEditingPlant({...editingPlant, species: e.target.value})}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none text-slate-800 dark:text-slate-100"
+                  value={editForm.species}
+                  onChange={e => handleEditChange("species", e.target.value)}
+                  aria-invalid={editErrors.species ? true : undefined}
+                  aria-describedby={editErrors.species ? "edit-plant-species-error" : undefined}
+                  className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 outline-none text-slate-800 dark:text-slate-100 ${editErrors.species ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 dark:border-slate-700 focus:ring-emerald-500/20 focus:border-emerald-500"}`}
+                  required
                 />
+                {editErrors.species && (
+                  <p id="edit-plant-species-error" role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+                    {editErrors.species}
+                  </p>
+                )}
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button 
+                <button
                   type="button"
-                  onClick={() => setEditingPlant(null)}
+                  onClick={closeEditModal}
                   className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   type="submit"
-                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium shadow-sm transition-colors"
+                  disabled={!editHasChanges}
+                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
                 >
                   Guardar
                 </button>
