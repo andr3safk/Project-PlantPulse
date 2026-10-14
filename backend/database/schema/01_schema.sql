@@ -2,6 +2,10 @@
 -- Creado para el proyecto académico PGC 2026-1 de la Universidad de Cundinamarca
 -- Subtask PLAN-52 de Jira
 
+-- Cambiar a la base de datos del proyecto (crearla primero con 00_create_database.sql)
+USE PlantPulse;
+GO
+
 -- Eliminar tablas si existen para que el script sea reejecutable (orden inverso al de creacion)
 -- Nota: GO es un separador de lotes de sqlcmd/SSMS; el driver de Node (mssql) no lo interpreta
 IF OBJECT_ID('dbo.Alerts', 'U') IS NOT NULL DROP TABLE dbo.Alerts;
@@ -19,9 +23,10 @@ CREATE TABLE Users (
     Email NVARCHAR(255) UNIQUE NOT NULL,
     PasswordHash NVARCHAR(255) NOT NULL, -- Almacena el hash bcrypt, nunca texto plano
     FullName NVARCHAR(150),
-    Role NVARCHAR(20) DEFAULT 'user', -- 'user' o 'admin'
-    IsActive BIT DEFAULT 1,
-    CreatedAt DATETIME2 DEFAULT SYSUTCDATETIME(),
+    Role NVARCHAR(20) NOT NULL DEFAULT 'user'
+        CONSTRAINT CK_Users_Role CHECK (Role IN ('user', 'admin')), -- 'user' o 'admin'
+    IsActive BIT NOT NULL DEFAULT 1,
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     LastLoginAt DATETIME2 NULL
 );
 
@@ -37,10 +42,11 @@ CREATE TABLE Devices (
     Name NVARCHAR(100) NULL,
     FirmwareVersion NVARCHAR(20) NULL,
     LastSeenAt DATETIME2 NULL,
-    Status NVARCHAR(20) DEFAULT 'offline', -- 'online', 'offline', 'error'
+    Status NVARCHAR(20) NOT NULL DEFAULT 'offline'
+        CONSTRAINT CK_Devices_Status CHECK (Status IN ('online', 'offline', 'error')), -- 'online', 'offline', 'error'
     BatteryLevel INT NULL,
     SignalStrength INT NULL,
-    CreatedAt DATETIME2 DEFAULT SYSUTCDATETIME()
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
 );
 
 -- Nota: DeviceKey ya tiene UNIQUE, que crea su propio indice unico (no hace falta otro)
@@ -54,13 +60,14 @@ CREATE TABLE Plants (
     Name NVARCHAR(100) NOT NULL,
     Species NVARCHAR(150) NOT NULL,
     ImageUrl NVARCHAR(500) NULL,
-    Status NVARCHAR(20) DEFAULT 'healthy', -- 'healthy', 'warning', 'critical'
+    Status NVARCHAR(20) NOT NULL DEFAULT 'healthy'
+        CONSTRAINT CK_Plants_Status CHECK (Status IN ('healthy', 'warning', 'critical')), -- 'healthy', 'warning', 'critical'
     Location NVARCHAR(50) NULL,
     LastWateredAt DATETIME2 NULL,
     DeviceId UNIQUEIDENTIFIER NULL, -- Relación opcional con un ESP32
     UserId UNIQUEIDENTIFIER NOT NULL, -- Relación con el propietario
-    CreatedAt DATETIME2 DEFAULT SYSUTCDATETIME(),
-    UpdatedAt DATETIME2 DEFAULT SYSUTCDATETIME(),
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    UpdatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     
     -- Restricciones de clave foránea
     CONSTRAINT FK_Plant_Device FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE SET NULL,
@@ -82,7 +89,7 @@ CREATE TABLE SensorReadings (
     Light DECIMAL(5,2) NULL,
     Temperature DECIMAL(5,2) NULL,
     Humidity DECIMAL(5,2) NULL,
-    RecordedAt DATETIME2 DEFAULT SYSUTCDATETIME(),
+    RecordedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     
     -- Restricciones de clave foránea
     CONSTRAINT FK_SensorReading_Device FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE,
@@ -101,13 +108,14 @@ CREATE TABLE Alerts (
     Id UNIQUEIDENTIFIER PRIMARY KEY DEFAULT NEWID(),
     PlantId UNIQUEIDENTIFIER NOT NULL,
     Type NVARCHAR(50) NOT NULL, -- 'low_moisture', 'high_temp', 'low_light', 'device_offline'
-    Severity NVARCHAR(20) NOT NULL, -- 'info', 'warning', 'critical'
+    Severity NVARCHAR(20) NOT NULL
+        CONSTRAINT CK_Alerts_Severity CHECK (Severity IN ('info', 'warning', 'critical')), -- 'info', 'warning', 'critical'
     Message NVARCHAR(500) NOT NULL,
     ThresholdValue DECIMAL(10,2) NULL,
     ActualValue DECIMAL(10,2) NULL,
-    IsResolved BIT DEFAULT 0,
+    IsResolved BIT NOT NULL DEFAULT 0,
     ResolvedAt DATETIME2 NULL,
-    CreatedAt DATETIME2 DEFAULT SYSUTCDATETIME(),
+    CreatedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
     
     -- Restricción de clave foránea
     CONSTRAINT FK_Alert_Plant FOREIGN KEY (PlantId) REFERENCES Plants(Id) ON DELETE CASCADE
