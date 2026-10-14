@@ -85,15 +85,19 @@ CREATE TABLE SensorReadings (
     Id BIGINT IDENTITY(1,1) PRIMARY KEY,
     DeviceId UNIQUEIDENTIFIER NOT NULL, -- Dispositivo que envió la lectura
     PlantId UNIQUEIDENTIFIER NULL, -- Planta asociada (opcional si es una lectura genérica)
-    Moisture DECIMAL(5,2) NULL,
-    Light DECIMAL(5,2) NULL,
-    Temperature DECIMAL(5,2) NULL,
-    Humidity DECIMAL(5,2) NULL,
+    Moisture DECIMAL(5,2) NULL, -- porcentaje 0-100
+    Light DECIMAL(5,2) NULL, -- porcentaje 0-100
+    Temperature DECIMAL(5,2) NULL, -- grados Celsius
     RecordedAt DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-    
+
     -- Restricciones de clave foránea
     CONSTRAINT FK_SensorReading_Device FOREIGN KEY (DeviceId) REFERENCES Devices(Id) ON DELETE CASCADE,
-    CONSTRAINT FK_SensorReading_Plant FOREIGN KEY (PlantId) REFERENCES Plants(Id) ON DELETE SET NULL
+    CONSTRAINT FK_SensorReading_Plant FOREIGN KEY (PlantId) REFERENCES Plants(Id) ON DELETE SET NULL,
+
+    -- Rangos validos (un CHECK sobre NULL se evalua como desconocido: permite lectura parcial)
+    CONSTRAINT CK_SensorReadings_Moisture CHECK (Moisture BETWEEN 0 AND 100),
+    CONSTRAINT CK_SensorReadings_Light CHECK (Light BETWEEN 0 AND 100),
+    CONSTRAINT CK_SensorReadings_Temperature CHECK (Temperature BETWEEN -10 AND 60)
 );
 
 -- Índices para optimización de consultas
