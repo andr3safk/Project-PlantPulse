@@ -2,7 +2,7 @@
 description: Audita los cambios de PlantPulse sin modificar archivos
 mode: subagent
 temperature: 0.1
-model: openrouter/cohere/north-mini-code:free
+model: openai/gpt-oss-20b:free
 permission:
   edit: deny
   bash: deny
