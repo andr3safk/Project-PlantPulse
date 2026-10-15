@@ -4,15 +4,18 @@ import jwt from 'jsonwebtoken';
 
 export const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+  if (typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return res.sendStatus(401);
+  }
+  const token = authHeader.split(' ')[1];
 
-  if (token == null) {
-    return res.sendStatus(401); // No autorizado si no hay token
+  if (!token) {
+    return res.sendStatus(401);
   }
 
   jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
     if (err) {
-      return res.sendStatus(403); // Prohibido si el token es inválido
+      return res.sendStatus(401); // 401, no 403 (contrato con frontend PLAN-35/36)
     }
     
     // Adjuntar el ID del usuario al request para uso en controladores
