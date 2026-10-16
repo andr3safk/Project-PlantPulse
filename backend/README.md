@@ -111,5 +111,26 @@ Las alertas de la planta se borran en cascada y sus lecturas quedan con `PlantId
 
 #### Errores comunes
 
-- `401`: sin token o con un token inválido o vencido (sin cuerpo).
+- `401`: `{ "message": "No autorizado" }` — sin token, con formato distinto a `Bearer <token>`, o con token inválido o vencido.
 - `500`: `{ "message": "Error interno del servidor" }`. El detalle solo se escribe en la consola del servidor.
+
+## Formato de errores
+
+Todas las respuestas de error de la API son JSON con una única forma:
+
+```json
+{ "message": "Texto legible del error" }
+```
+
+Así el frontend maneja cualquier error de la misma manera: lee el código HTTP y muestra `body.message`.
+
+| Código | Cuándo ocurre | `message` | Dónde se genera |
+|---|---|---|---|
+| 400 | Falta `email` o `password` en el login | `Email y password son requeridos` | `src/routes/auth.js` |
+| 400 | El cuerpo de la petición no es un JSON válido | `El cuerpo de la petición no es un JSON válido` | Manejador de errores en `src/app.js` |
+| 401 | Email o contraseña incorrectos (mismo mensaje en ambos casos, para no revelar qué emails existen) | `Credenciales inválidas` | `src/routes/auth.js` |
+| 401 | Ruta protegida sin token, con formato distinto a `Bearer <token>`, o con token inválido o vencido | `No autorizado` | `src/middleware/auth.js` |
+| 404 | La ruta solicitada no existe | `Ruta no encontrada` | Manejador 404 en `src/app.js` |
+| 404 | La planta no existe o pertenece a otro usuario | `Planta no encontrada` | `src/routes/plants.js` |
+| 413 | El cuerpo supera el límite de `express.json()` (100 kb por defecto) | `El cuerpo de la petición es demasiado grande` | Manejador de errores en `src/app.js` |
+| 500 | Error inesperado del servidor. El detalle se registra en la consola del servidor y nunca se envía al cliente | `Error interno del servidor` | Manejador de errores en `src/app.js` y `src/routes/auth.js` |
