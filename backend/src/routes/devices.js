@@ -1,3 +1,5 @@
+// Rutas de dispositivos — PLAN-56
+// POST /api/devices/heartbeat: el ESP32 avisa que está conectado (cada 20 s)
 import express from 'express';
 import sql from 'mssql';
 import { deviceAuth } from '../middleware/deviceAuth.js';
@@ -7,13 +9,14 @@ const router = express.Router();
 
 router.post('/heartbeat', deviceAuth, async (req, res) => {
   try {
-    const deviceId = req.device.id;
-    await pool.request()
-      .input('deviceId', sql.NVarChar, deviceId)
-      .query("UPDATE Devices SET LastSeenAt = SYSUTCDATETIME(), Status = 'online' WHERE Id = @deviceId");
+    // Un solo UPDATE que devuelve la fila actualizada (OUTPUT)
     const result = await pool.request()
-      .input('deviceId', sql.NVarChar, deviceId)
-      .query("SELECT CAST(Id AS NVARCHAR(50)) AS deviceId, Status AS status, LastSeenAt AS lastSeenAt FROM Devices WHERE Id = @deviceId");
+      .input('deviceId', sql.UniqueIdentifier, req.device.id)
+      .query(`
+        UPDATE Devices SET LastSeenAt = SYSUTCDATETIME(), Status = 'online'
+        OUTPUT LOWER(CAST(INSERTED.Id AS NVARCHAR(50))) AS deviceId, INSERTED.Status AS status, INSERTED.LastSeenAt AS lastSeenAt
+        WHERE Id = @deviceId
+      `);
     const row = result.recordset[0];
     res.json({ deviceId: row.deviceId, status: row.status, lastSeenAt: row.lastSeenAt });
   } catch (err) {
