@@ -9,7 +9,7 @@ export interface LoginResponse {
 
 export type PlantStatus = 'healthy' | 'warning' | 'critical';
 
-// Planta tal como la devuelve la API (POST /api/plants -> 201)
+// Planta tal como la devuelve la API (GET, POST y PUT de /api/plants)
 export interface PlantResponse {
   id: string;
   name: string;
@@ -30,3 +30,7 @@ export interface CreatePlantRequest {
   location?: string;
   imageUrl?: string;
 }
+
+// Campos que acepta PUT /api/plants/:id. Es un reemplazo completo:
+// un opcional que no se envía queda en NULL (por eso se reenvía el imageUrl actual).
+export type UpdatePlantRequest = CreatePlantRequest;
