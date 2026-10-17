@@ -1,20 +1,23 @@
 // Pruebas del Dashboard: lista desde la API y edición de plantas — PLAN-9 (PLAN-23, 24, 25, 26)
 // - El servicio ./api/plants está simulado: no se necesita el backend.
 // - PlantProvider y Dashboard son los reales.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { act, render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
+import { toast } from 'sonner';
 import { Dashboard } from './Dashboard';
 import { PlantProvider } from './contexts/PlantContext';
+import { Toaster } from './components/ui/sonner';
 import { ApiError } from './api/client';
 import { listPlants, getPlant, updatePlant } from './api/plants';
 import type { PlantResponse } from './api/types';
-import { MSG_SIN_CONEXION, MSG_TIMEOUT } from './utils/mensajesRegistro';
+import { MSG_GENERICO, MSG_REVISA_CAMPOS, MSG_SIN_CONEXION, MSG_TIMEOUT } from './utils/mensajesRegistro';
 import {
   MSG_ERROR_CARGA_LISTA,
   MSG_ERROR_CARGA_PLANTA,
   MSG_PLANTA_NO_ENCONTRADA,
+  mensajeExitoEdicion,
 } from './utils/mensajesEdicion';
 
 vi.mock('./api/plants', () => ({
@@ -67,6 +70,7 @@ const renderDashboard = () =>
     <MemoryRouter>
       <PlantProvider>
         <Dashboard />
+        <Toaster />
       </PlantProvider>
     </MemoryRouter>
   );
@@ -106,6 +110,11 @@ beforeEach(() => {
     if (!encontrada) throw new ApiError('Planta no encontrada', 404);
     return encontrada;
   });
+});
+
+afterEach(() => {
+  // sonner guarda los avisos en un estado global: se limpian entre pruebas
+  toast.dismiss();
 });
 
 // --- Lista ------------------------------------------------------------------
@@ -472,11 +481,68 @@ describe('Editar planta: validación (PLAN-25)', () => {
   });
 });
 
-// --- Guardado (todavía en local) ----------------------------------------------
+// --- PLAN-24: actualizar mediante la API --------------------------------------
 
-describe('Editar planta: guardado provisional en local', () => {
-  it('una edición válida con espacios de más guarda el nombre normalizado y cierra el modal', async () => {
+describe('Editar planta: guardar con PUT (PLAN-24)', () => {
+  it('envía los 4 campos con el imageUrl actual, actualiza la tarjeta, cierra el modal y avisa', async () => {
     const user = userEvent.setup();
+    updatePlantMock.mockResolvedValueOnce(planta({ name: 'Mi Monstera', location: 'oficina' }));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user, 0);
+    await user.clear(inputNombre());
+    await user.type(inputNombre(), 'Mi Monstera');
+    await user.selectOptions(selectUbicacion(), 'oficina');
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(modalAbierto()).not.toBeInTheDocument());
+    expect(updatePlantMock).toHaveBeenCalledTimes(1);
+    expect(updatePlantMock).toHaveBeenCalledWith(ID_MONSTRUO, {
+      name: 'Mi Monstera',
+      species: 'Monstera Deliciosa',
+      location: 'oficina',
+      imageUrl: 'https://ejemplo.com/monstruo.jpg',
+    });
+    expect(screen.getByRole('heading', { level: 3, name: 'Mi Monstera' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 3, name: 'Monstruo' })).not.toBeInTheDocument();
+    expect(await screen.findByText(mensajeExitoEdicion('Mi Monstera'))).toBeInTheDocument();
+  });
+
+  it('una planta sin foto no envía imageUrl', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockResolvedValueOnce({ ...SERPIENTINA, name: 'Serpiente' });
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user, 1);
+    await user.clear(inputNombre());
+    await user.type(inputNombre(), 'Serpiente');
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(updatePlantMock).toHaveBeenCalledTimes(1));
+    const [, datos] = updatePlantMock.mock.calls[0];
+    expect(datos).toEqual({ name: 'Serpiente', species: 'Sansevieria Trifasciata', location: '' });
+    expect(datos).not.toHaveProperty('imageUrl');
+  });
+
+  it('elegir "Sin ubicación" envía location vacía (el backend la guarda como NULL)', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockResolvedValueOnce(planta({ location: null }));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user, 0);
+    await user.selectOptions(selectUbicacion(), '');
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(updatePlantMock).toHaveBeenCalledTimes(1));
+    expect(updatePlantMock.mock.calls[0][1].location).toBe('');
+  });
+
+  it('envía el nombre normalizado y la tarjeta muestra el nombre que devolvió la API', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockResolvedValueOnce(planta({ name: 'Mi Monstera' }));
     renderDashboard();
     await esperarLista();
 
@@ -485,10 +551,123 @@ describe('Editar planta: guardado provisional en local', () => {
     await user.type(inputNombre(), '  Mi    Monstera  ');
     await user.click(botonGuardar());
 
-    expect(modalAbierto()).not.toBeInTheDocument();
+    await waitFor(() => expect(modalAbierto()).not.toBeInTheDocument());
+    expect(updatePlantMock.mock.calls[0][1].name).toBe('Mi Monstera');
     // Testing Library unifica espacios al buscar por nombre, así que se compara textContent exacto
     const titulo = screen.getByRole('heading', { level: 3, name: 'Mi Monstera' });
     expect(titulo.textContent).toBe('Mi Monstera');
-    expect(screen.queryByRole('heading', { level: 3, name: 'Monstruo' })).not.toBeInTheDocument();
+  });
+
+  it('mientras guarda: "Guardando...", botones deshabilitados y no se envía dos veces', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockReturnValueOnce(new Promise(() => {})); // nunca responde
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    // Dos envíos seguidos del formulario: el segundo no debe llamar a la API.
+    // (Un segundo clic no sirve: el botón ya está deshabilitado y el clic no llega al manejador.)
+    const formulario = inputNombre().closest('form')!;
+    fireEvent.submit(formulario);
+    fireEvent.submit(formulario);
+
+    expect(botonGuardar()).toHaveTextContent('Guardando...');
+    expect(botonGuardar()).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cancelar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Cerrar' })).toBeDisabled();
+    expect(updatePlantMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('un 400 con errors.name muestra el mensaje bajo el nombre y "Revisa los campos marcados."', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockRejectedValueOnce(
+      new ApiError('Datos de planta inválidos', 400, { name: 'El nombre debe tener al menos 2 caracteres.' })
+    );
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    await user.click(botonGuardar());
+
+    expect(await screen.findByText('El nombre debe tener al menos 2 caracteres.')).toBeInTheDocument();
+    expect(inputNombre()).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(MSG_REVISA_CAMPOS)).toBeInTheDocument();
+    expect(screen.queryByText('Datos de planta inválidos')).not.toBeInTheDocument();
+    expect(modalAbierto()).toBeInTheDocument();
+  });
+
+  it('un 400 solo con errors.imageUrl muestra ese mensaje en el recuadro', async () => {
+    const user = userEvent.setup();
+    const mensaje = 'La URL de la imagen debe empezar por http:// o https://.';
+    updatePlantMock.mockRejectedValueOnce(new ApiError('Datos de planta inválidos', 400, { imageUrl: mensaje }));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    await user.click(botonGuardar());
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(mensaje);
+  });
+
+  it.each([
+    ['404', new ApiError('Planta no encontrada', 404), MSG_PLANTA_NO_ENCONTRADA],
+    ['status 0', new ApiError('Error de conexión con el servidor', 0), MSG_SIN_CONEXION],
+    ['408', new ApiError('Solicitud cancelada por timeout', 408), MSG_TIMEOUT],
+    ['500', new ApiError('Error interno del servidor', 500), MSG_GENERICO],
+    ['un error que no es ApiError', new Error('fallo raro'), MSG_GENERICO],
+  ])('%s: recuadro con el mensaje traducido, modal abierto y botón habilitado', async (_caso, error, mensaje) => {
+    const user = userEvent.setup();
+    updatePlantMock.mockRejectedValueOnce(error);
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    await user.click(botonGuardar());
+
+    const alerta = await screen.findByRole('alert');
+    expect(alerta).toHaveTextContent(mensaje);
+    expect(alerta).not.toHaveTextContent(error.message);
+    expect(modalAbierto()).toBeInTheDocument();
+    expect(botonGuardar()).toBeEnabled();
+    expect(botonGuardar()).toHaveTextContent('Guardar');
+  });
+
+  it('un 401 al guardar cierra el modal sin recuadro ni aviso de éxito', async () => {
+    const user = userEvent.setup();
+    updatePlantMock.mockRejectedValueOnce(new ApiError('No autorizado', 401));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(modalAbierto()).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/actualizada correctamente/)).not.toBeInTheDocument();
+  });
+
+  it('después de un error, un segundo intento correcto guarda y cierra el modal', async () => {
+    const user = userEvent.setup();
+    updatePlantMock
+      .mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0))
+      .mockResolvedValueOnce(planta({ name: 'Monstruo II' }));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEditar(user);
+    await user.type(inputNombre(), ' II');
+    await user.click(botonGuardar());
+    await screen.findByRole('alert');
+
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(modalAbierto()).not.toBeInTheDocument());
+    expect(updatePlantMock).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo II' })).toBeInTheDocument();
   });
 });

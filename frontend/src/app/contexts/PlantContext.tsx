@@ -59,7 +59,6 @@ type PlantContextType = {
   cargarPlantas: () => Promise<void>;
   addPlantFromApi: (plant: PlantResponse) => void;
   replacePlantFromApi: (plant: PlantResponse) => void;
-  updatePlant: (id: string, plant: Partial<Plant>) => void;
   deletePlant: (id: string) => void;
   varySensors: () => void;
 };
@@ -109,11 +108,6 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
     setPlants((prev) => prev.map((p) => (p.id === plant.id ? plantFromApi(plant, p.sensors) : p)));
   };
 
-  // Temporal: el modal de edición todavía guarda en local (se quita al usar PUT /api/plants/:id)
-  const updatePlant = (id: string, updatedData: Partial<Plant>) => {
-    setPlants((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
-  };
-
   // Provisional hasta PLAN-15 (PLAN-28): solo quita la planta de la pantalla, no llama a la API
   const deletePlant = (id: string) => {
     setPlants((prev) => prev.filter((p) => p.id !== id));
@@ -151,7 +145,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PlantContext.Provider
-      value={{ plants, estadoCarga, errorCarga, cargarPlantas, addPlantFromApi, replacePlantFromApi, updatePlant, deletePlant, varySensors }}
+      value={{ plants, estadoCarga, errorCarga, cargarPlantas, addPlantFromApi, replacePlantFromApi, deletePlant, varySensors }}
     >
       {children}
     </PlantContext.Provider>

@@ -1,17 +1,20 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Droplets, Sun, Thermometer, Wind, AlertCircle, AlertTriangle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
+import { toast } from "sonner";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
 import { usePlants, Plant } from "./contexts/PlantContext";
-import { getPlant } from "./api/plants";
+import { getPlant, updatePlant } from "./api/plants";
 import { ApiError } from "./api/client";
-import type { PlantResponse } from "./api/types";
+import type { PlantResponse, UpdatePlantRequest } from "./api/types";
 import { validarPlanta, normalizarTexto, NOMBRE_MAX, ESPECIE_MAX, type ErroresPlanta } from "./utils/validarPlanta";
-import { type CampoVisible } from "./utils/mensajesRegistro";
+import { esCampoVisible, type CampoVisible } from "./utils/mensajesRegistro";
 import {
   MSG_ERROR_CARGA_LISTA,
   MSG_ERROR_CARGA_PLANTA,
   mensajeErrorCarga,
+  mensajeErrorEdicion,
+  mensajeExitoEdicion,
 } from "./utils/mensajesEdicion";
 import { UBICACIONES, esUbicacionConocida, etiquetaUbicacion } from "./utils/opcionesPlanta";
 
@@ -28,7 +31,7 @@ const formDesdeApi = (p: PlantResponse): FormEdicion => ({
 });
 
 export function Dashboard() {
-  const { plants, estadoCarga, errorCarga, cargarPlantas, deletePlant, updatePlant } = usePlants();
+  const { plants, estadoCarga, errorCarga, cargarPlantas, deletePlant, replacePlantFromApi } = usePlants();
 
   // --- Edición (PLAN-9) ---
   // editingPlant: la tarjeta que se pulsó. original: los datos reales que devolvió GET /api/plants/:id.
@@ -38,6 +41,9 @@ export function Dashboard() {
   const [editErrors, setEditErrors] = useState<ErroresPlanta>({});
   const [editGeneralError, setEditGeneralError] = useState<string | null>(null);
   const [cargandoEdicion, setCargandoEdicion] = useState(false);
+  const [guardando, setGuardando] = useState(false);
+  // El ref evita un doble envío antes de que React vuelva a renderizar el botón deshabilitado
+  const guardandoRef = useRef(false);
   // Cada apertura del modal recibe un número: una respuesta de un modal anterior se ignora
   const solicitudEdicion = useRef(0);
 
@@ -108,9 +114,10 @@ export function Dashboard() {
     setEditErrors(prev => ({ ...prev, [field]: undefined }));
   };
 
-  const handleEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  // PLAN-24: guarda los cambios con PUT /api/plants/:id
+  const handleEditSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!original) return;
+    if (!original || guardandoRef.current) return;
 
     const errors = validarPlanta(editForm);
     const primerError = CAMPOS_EDICION.find((campo) => errors[campo]);
@@ -121,13 +128,46 @@ export function Dashboard() {
       return;
     }
 
-    // Provisional: todavía guarda en local; PLAN-24 lo cambia por PUT /api/plants/:id
-    updatePlant(original.id, {
+    // El PUT reemplaza todos los campos: se reenvía el imageUrl actual para no borrar la foto
+    const datos: UpdatePlantRequest = {
       name: normalizarTexto(editForm.name),
       species: normalizarTexto(editForm.species),
       location: normalizarTexto(editForm.location),
-    });
-    closeEditModal();
+    };
+    if (original.imageUrl) datos.imageUrl = original.imageUrl;
+
+    guardandoRef.current = true;
+    setGuardando(true);
+    setEditErrors({});
+    setEditGeneralError(null);
+
+    try {
+      const actualizada = await updatePlant(original.id, datos);
+      replacePlantFromApi(actualizada);
+      // Se usa el nombre que guardó la API, no el del formulario
+      toast.success(mensajeExitoEdicion(actualizada.name));
+      closeEditModal();
+    } catch (error) {
+      // 401: apiFetch ya cerró la sesión y redirige a /login
+      if (error instanceof ApiError && error.status === 401) {
+        closeEditModal();
+        return;
+      }
+      const visibles: ErroresPlanta = {};
+      const otros: string[] = [];
+      if (error instanceof ApiError) {
+        for (const [campo, mensaje] of Object.entries(error.errors ?? {})) {
+          if (esCampoVisible(campo)) visibles[campo] = mensaje;
+          else otros.push(mensaje);
+        }
+      }
+      setEditErrors(visibles);
+      // El texto crudo del backend nunca se muestra: se traduce según el estado
+      setEditGeneralError(mensajeErrorEdicion(error, otros));
+    } finally {
+      guardandoRef.current = false;
+      setGuardando(false);
+    }
   };
 
   const confirmDelete = () => {
@@ -226,6 +266,7 @@ export function Dashboard() {
               <button
                 type="button"
                 onClick={closeEditModal}
+                disabled={guardando}
                 aria-label="Cerrar"
                 className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
@@ -306,16 +347,17 @@ export function Dashboard() {
                   <button
                     type="button"
                     onClick={closeEditModal}
+                    disabled={guardando}
                     className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Cancelar
                   </button>
                   <button
                     type="submit"
-                    disabled={!editHasChanges}
+                    disabled={!editHasChanges || guardando}
                     className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
                   >
-                    Guardar
+                    {guardando ? "Guardando..." : "Guardar"}
                   </button>
                 </div>
               </form>
