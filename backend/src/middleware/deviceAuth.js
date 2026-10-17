@@ -9,7 +9,7 @@ export const deviceAuth = async (req, res, next) => {
   }
   try {
     const result = await pool.request()
-      .input('deviceKey', deviceKey)
+      .input('deviceKey', sql.UniqueIdentifier, deviceKey)
       .query('SELECT CAST(Id AS NVARCHAR(50)) AS Id, DeviceKey FROM Devices WHERE DeviceKey = @deviceKey');
     if (result.recordset.length === 0) {
       return res.status(401).json({ message: 'Dispositivo no autorizado' });
