@@ -260,3 +260,155 @@ describe('Formulario AddPlant', () => {
     expect(nombre).not.toHaveAttribute('aria-invalid');
   });
 });
+
+// --- Validación en el cliente (PLAN-17) -----------------------------------
+
+describe('Formulario AddPlant: validación en el cliente', () => {
+  const MENSAJE_CARACTERES_NOMBRE =
+    'El nombre solo puede contener letras, números, espacios, guiones, puntos y paréntesis.';
+
+  const campoNombre = () => screen.getByLabelText(/nombre o apodo/i);
+  const campoEspecie = () => screen.getByLabelText(/especie de planta/i);
+
+  it('con el nombre vacío muestra el mensaje bajo el nombre, marca aria-invalid y no llama a la API', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.selectOptions(campoEspecie(), 'Pothos');
+    await user.click(botonGuardar());
+
+    const mensaje = await screen.findByText('El nombre es un campo obligatorio.');
+    expect(mensaje.id).toBe('plant-name-error');
+    expect(campoNombre()).toHaveAttribute('aria-invalid', 'true');
+    expect(campoNombre()).toHaveAttribute('aria-describedby', 'plant-name-error');
+    expect(createPlantMock).not.toHaveBeenCalled();
+  });
+
+  it('con un nombre de 1 carácter muestra el mínimo y no llama a la API', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.type(campoNombre(), 'P');
+    await user.selectOptions(campoEspecie(), 'Pothos');
+    await user.click(botonGuardar());
+
+    expect(await screen.findByText('El nombre debe tener al menos 2 caracteres.')).toBeInTheDocument();
+    expect(createPlantMock).not.toHaveBeenCalled();
+  });
+
+  it('con caracteres no permitidos en el nombre muestra el mensaje de caracteres y no llama a la API', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.type(campoNombre(), 'Planta<b>');
+    await user.selectOptions(campoEspecie(), 'Pothos');
+    await user.click(botonGuardar());
+
+    expect(await screen.findByText(MENSAJE_CARACTERES_NOMBRE)).toBeInTheDocument();
+    expect(createPlantMock).not.toHaveBeenCalled();
+  });
+
+  it('sin especie elegida muestra el mensaje bajo la especie y no llama a la API', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.type(campoNombre(), 'Pepita');
+    await user.click(botonGuardar());
+
+    const mensaje = await screen.findByText('La especie es un campo obligatorio.');
+    expect(mensaje.id).toBe('plant-species-error');
+    expect(campoEspecie()).toHaveAttribute('aria-invalid', 'true');
+    expect(createPlantMock).not.toHaveBeenCalled();
+  });
+
+  it('con nombre y especie inválidos muestra los dos mensajes y el foco queda en el nombre', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.click(botonGuardar());
+
+    expect(await screen.findByText('El nombre es un campo obligatorio.')).toBeInTheDocument();
+    expect(screen.getByText('La especie es un campo obligatorio.')).toBeInTheDocument();
+    expect(document.activeElement).toBe(campoNombre());
+    expect(createPlantMock).not.toHaveBeenCalled();
+  });
+
+  it('con solo la especie inválida el foco queda en el select de especie', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.type(campoNombre(), 'Pepita');
+    await user.click(botonGuardar());
+
+    await screen.findByText('La especie es un campo obligatorio.');
+    expect(screen.queryByText(/el nombre/i)).not.toBeInTheDocument();
+    expect(document.activeElement).toBe(campoEspecie());
+  });
+
+  it('envía el nombre normalizado, sin espacios de más', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockResolvedValueOnce(plantaApi({ name: 'Mi Pothos' }));
+    const router = renderFormulario();
+
+    await user.type(campoNombre(), '  Mi    Pothos  ');
+    await user.selectOptions(campoEspecie(), 'Pothos');
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(createPlantMock).toHaveBeenCalledTimes(1);
+    expect(createPlantMock).toHaveBeenCalledWith({ name: 'Mi Pothos', species: 'Pothos', location: 'sala' });
+  });
+
+  it('al corregir el campo se borra su mensaje y el siguiente envío sí llama a la API', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockResolvedValueOnce(plantaApi());
+    const router = renderFormulario();
+
+    await user.selectOptions(campoEspecie(), 'Pothos');
+    await user.click(botonGuardar());
+    await screen.findByText('El nombre es un campo obligatorio.');
+    expect(createPlantMock).not.toHaveBeenCalled();
+
+    await user.type(campoNombre(), 'Pepita');
+    expect(screen.queryByText('El nombre es un campo obligatorio.')).not.toBeInTheDocument();
+    expect(campoNombre()).not.toHaveAttribute('aria-invalid');
+
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(createPlantMock).toHaveBeenCalledTimes(1);
+    expect(createPlantMock).toHaveBeenCalledWith({ name: 'Pepita', species: 'Pothos', location: 'sala' });
+  });
+
+  it('el nombre tiene maxLength 50', () => {
+    renderFormulario();
+    expect(campoNombre()).toHaveAttribute('maxLength', '50');
+  });
+
+  it('con errores de validación no aparece la caja de error general', async () => {
+    const user = userEvent.setup();
+    renderFormulario();
+
+    await user.click(botonGuardar());
+
+    await screen.findByText('El nombre es un campo obligatorio.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('un error de validación borra la caja general de un envío anterior fallido', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0));
+    renderFormulario();
+
+    await llenarFormulario(user);
+    await user.click(botonGuardar());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Error de conexión con el servidor');
+
+    await user.clear(campoNombre());
+    await user.click(botonGuardar());
+
+    await screen.findByText('El nombre es un campo obligatorio.');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(createPlantMock).toHaveBeenCalledTimes(1);
+  });
+});
