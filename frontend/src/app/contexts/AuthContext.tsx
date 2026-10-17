@@ -35,20 +35,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => {
-      logout();
-    });
-  }, []);
-
-  // Inicializar estado desde localStorage al montar el componente
-  useEffect(() => {
+    setUnauthorizedHandler(() => logout());
     const initializeAuth = () => {
       try {
         const storedToken = localStorage.getItem('plantpulse_token');
         if (storedToken) {
           const decoded = decodeToken(storedToken);
           if (decoded && !isTokenExpired(storedToken)) {
-            const payload = JSON.parse(atob(storedToken.split('.')[1]));
+            const payload = decoded;
             setToken(storedToken);
             setUser({ id: payload.id, email: '', name: '' });
           } else {
@@ -93,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loginData: LoginRequest = { email, password };
       const response = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify(loginData),
+        body: loginData,
       });
       
       localStorage.setItem('plantpulse_token', response.token);

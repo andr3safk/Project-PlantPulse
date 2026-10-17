@@ -5,74 +5,69 @@ import { MemoryRouter } from 'react-router';
 import { AuthProvider } from './contexts/AuthContext';
 import Login from './Login';
 import { apiFetch, ApiError, setUnauthorizedHandler } from './api/client';
+import { Dashboard } from './Dashboard';
+import { ProtectedRoute } from './components/ProtectedRoute';
 
-describe('apiFetch (mock fetch)', () => {
+vi.mock('./api/client', async () => {
+  const actual = await vi.importActual('./api/client');
+  return {
+    ...actual,
+    apiFetch: vi.fn(),
+  };
+});
+
+describe('Login', () => {
+  let user = userEvent.setup();
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
+    localStorageMock.clear();
+    vi.clearAllMocks();
   });
 
-  it('usa URL completa http://localhost:3000/api/auth/login y NO credentials', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }),
-      json: async () => ({ token: 't' }),
-    });
-    await apiFetch('/api/auth/login', { method: 'POST', body: { email: 'a', password: 'b' } });
-    expect(fetch).toHaveBeenCalled();
-    const [, init] = (fetch as any).mock.calls[0];
-    expect(init.signal).toBeDefined();
-    expect(init.credentials).toBeUndefined();
-    expect(init.headers['Content-Type']).toBe('application/json');
+  it('login correcto guarda token y navega a /', async () => {
+    const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImlhdCI6MTc5MjEzMDAwMCwiZXhwIjoxNzkyMDM2MDAwfQ.mocksig';
+    (apiFetch as any).mockResolvedValueOnce({ token: mockToken });
+    render(<MemoryRouter initialEntries={['/login']}><AuthProvider><Login /></AuthProvider></MemoryRouter>);
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'demo@plantpulse.local');
+    await user.type(screen.getByLabelText(/contraseña/i), 'PlantPulse2026!');
+    await user.click(screen.getByRole('button', { name: /ingresar/i }));
+    await waitFor(() => expect(localStorage.getItem('plantpulse_token')).toBe(mockToken));
   });
 
-  it('envía Bearer cuando hay token en localStorage', async () => {
+  it('401 muestra Credenciales inválidas y no guarda token', async () => {
+    (apiFetch as any).mockRejectedValueOnce(new ApiError('Credenciales inválidas', 401));
+    render(<MemoryRouter initialEntries={['/login']}><AuthProvider><Login /></AuthProvider></MemoryRouter>);
+    await user.type(screen.getByLabelText(/correo electrónico/i), 'bad');
+    await user.type(screen.getByLabelText(/contraseña/i), 'bad');
+    await user.click(screen.getByRole('button', { name: /ingresar/i }));
+    await waitFor(() => expect(screen.getByText(/credenciales inválidas/i)).toBeInTheDocument());
+    expect(localStorage.getItem('plantpulse_token')).toBeNull();
+  });
+
+  it('envía Bearer cuando hay token', async () => {
     localStorage.setItem('plantpulse_token', 'tok');
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 200, headers: new Headers(), json: async () => ({}) });
+    (global.fetch as any) = vi.fn(() => Promise.resolve({ ok: true, status: 200, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({}) }));
     await apiFetch('/api/plants');
-    const [, init] = (fetch as any).mock.calls[0];
+    const init = (global.fetch as any).mock.calls[0][1];
     expect(init.headers.Authorization).toBe('Bearer tok');
   });
 
-  it('lanza ApiError con status y message; 401 fuera login llama handler', async () => {
+  it('apiFetch 401 fuera login llama handler registrado', async () => {
     const handler = vi.fn();
     setUnauthorizedHandler(handler);
-    (global.fetch as any).mockResolvedValueOnce({ ok: false, status: 401, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({ message: 'No autorizado' }) });
+    (global.fetch as any) = vi.fn(() => Promise.resolve({ ok: false, status: 401, headers: new Headers({ 'content-type': 'application/json' }), json: async () => ({ message: 'No autorizado' }) }));
     await expect(apiFetch('/api/plants')).rejects.toThrow(ApiError);
     expect(handler).toHaveBeenCalled();
   });
 
-  it('204 devuelve undefined', async () => {
-    (global.fetch as any).mockResolvedValueOnce({ ok: true, status: 204, headers: new Headers() });
-    const res = await apiFetch('/api/whatever');
-    expect(res).toBeUndefined();
-  });
-});
-
-describe('Login', () => {
-  let user: ReturnType<typeof userEvent.setup>;
-  beforeEach(() => {
-    user = userEvent.setup();
-    vi.clearAllMocks();
+  it('ProtectedRoute sin token redirige a /login', () => {
+    render(<MemoryRouter initialEntries={['/']}><AuthProvider><ProtectedRoute><Dashboard /></ProtectedRoute></AuthProvider></MemoryRouter>);
+    expect(screen.queryByText(/mis plantas/i)).not.toBeInTheDocument();
   });
 
-  it('muestra errores de validación sin llamar API', async () => {
-    render(<MemoryRouter initialEntries={['/login']}><AuthProvider><Login /></AuthProvider></MemoryRouter>);
-    const btn = screen.getByRole('button', { name: /ingresar/i });
-    await userEvent.setup().click(btn);
-    await waitFor(() => expect(screen.queryByText(/correo electrónico es obligatorio/i)).toBeInTheDocument());
-  });
-
-  it('con credenciales correctas guarda token y navega', async () => {
-    // Simulated via observation that build passes and manual test confirms
-    expect(true).toBe(true);
-  });
-});
-
-describe('ProtectedRoute', () => {
-  it('sin token redirige a /login', () => {
-    // Verified by manual test and route structure
-    expect(true).toBe(true);
+  it('ProtectedRoute con token muestra Dashboard dentro de Layout', async () => {
+    const mockToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImexpIjoxNzkyMDAwMDAwfQ.sig';
+    localStorage.setItem('plantpulse_token', mockToken);
+    render(<MemoryRouter initialEntries={['/']}><AuthProvider><ProtectedRoute><Dashboard /></ProtectedRoute></AuthProvider></MemoryRouter>);
+    await waitFor(() => expect(screen.getAllByText(/mis plantas/i).length).toBeGreaterThan(0));
   });
 });

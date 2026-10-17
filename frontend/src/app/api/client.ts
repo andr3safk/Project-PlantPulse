@@ -29,6 +29,10 @@ export async function apiFetch<T = any>(url: string, options: ApiFetchOptions = 
   // Bearer token desde localStorage
   const token = localStorage.getItem('plantpulse_token');
 
+  if (options && options.body && typeof options.body !== 'string') {
+    options = { ...options, body: JSON.stringify(options.body) };
+  }
+
   try {
     const response = await fetch(fullUrl, {
       ...options,
