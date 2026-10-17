@@ -124,7 +124,7 @@ describe('GET /api/plants/:id', () => {
       name: 'Monstera',
       species: 'Monstera deliciosa',
       status: 'healthy',
-      location: 'Sala',
+      location: 'sala',
       deviceId: '22222222-2222-2222-2222-222222222222',
     });
   });
