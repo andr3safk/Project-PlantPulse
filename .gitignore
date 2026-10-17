@@ -23,6 +23,7 @@ coverage/
 
 # ESP32 (PlatformIO)
 .pio/
+secrets.h
 
 # Sistema operativo
 Thumbs.db
