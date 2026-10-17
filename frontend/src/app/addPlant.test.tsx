@@ -10,6 +10,7 @@ import { PlantProvider, usePlants, plantFromApi, DEFAULT_PLANT_IMAGE } from './c
 import { ApiError } from './api/client';
 import { createPlant } from './api/plants';
 import type { PlantResponse } from './api/types';
+import { MSG_REVISA_CAMPOS, MSG_SIN_CONEXION } from './utils/mensajesRegistro';
 
 vi.mock('./api/plants', () => ({ createPlant: vi.fn() }));
 const createPlantMock = vi.mocked(createPlant);
@@ -198,7 +199,7 @@ describe('Formulario AddPlant', () => {
     expect(createPlantMock).toHaveBeenCalledTimes(1);
   });
 
-  it('un 400 con errores muestra el mensaje bajo el nombre y el mensaje general, sin navegar', async () => {
+  it('un 400 con errores muestra el mensaje bajo el nombre y "Revisa los campos marcados.", sin navegar', async () => {
     const user = userEvent.setup();
     createPlantMock.mockRejectedValueOnce(
       new ApiError('Datos de planta inválidos', 400, { name: 'El nombre ya existe.' })
@@ -213,11 +214,11 @@ describe('Formulario AddPlant', () => {
     expect(nombre).toHaveAttribute('aria-invalid', 'true');
     expect(nombre).toHaveAttribute('aria-describedby', mensajeCampo.id);
     expect(mensajeCampo.id).toBe('plant-name-error');
-    expect(screen.getByRole('alert')).toHaveTextContent('Datos de planta inválidos');
+    expect(screen.getByRole('alert')).toHaveTextContent(MSG_REVISA_CAMPOS);
     expect(router.state.location.pathname).toBe('/add');
   });
 
-  it('un error de red (status 0) muestra "Error de conexión con el servidor" y el botón se vuelve a habilitar', async () => {
+  it('un error de red (status 0) muestra el mensaje de sin conexión y el botón se vuelve a habilitar', async () => {
     const user = userEvent.setup();
     createPlantMock.mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0));
     renderFormulario();
@@ -225,7 +226,7 @@ describe('Formulario AddPlant', () => {
     await llenarFormulario(user);
     await user.click(botonGuardar());
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('Error de conexión con el servidor');
+    expect(await screen.findByRole('alert')).toHaveTextContent(MSG_SIN_CONEXION);
     expect(screen.getByRole('button', { name: /guardar planta/i })).toBeEnabled();
   });
 
@@ -402,7 +403,7 @@ describe('Formulario AddPlant: validación en el cliente', () => {
 
     await llenarFormulario(user);
     await user.click(botonGuardar());
-    expect(await screen.findByRole('alert')).toHaveTextContent('Error de conexión con el servidor');
+    expect(await screen.findByRole('alert')).toHaveTextContent(MSG_SIN_CONEXION);
 
     await user.clear(campoNombre());
     await user.click(botonGuardar());

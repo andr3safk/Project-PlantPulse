@@ -5,6 +5,12 @@ import { usePlants } from "./contexts/PlantContext";
 import { createPlant } from "./api/plants";
 import { ApiError } from "./api/client";
 import { validarPlanta, normalizarTexto, NOMBRE_MAX } from "./utils/validarPlanta";
+import {
+  CAMPOS_VISIBLES,
+  esCampoVisible,
+  mensajeErrorRegistro,
+  type CampoVisible,
+} from "./utils/mensajesRegistro";
 
 const SPECIES_OPTIONS = [
   "Monstera Deliciosa",
@@ -19,10 +25,8 @@ const SPECIES_OPTIONS = [
 ];
 
 // Campos del formulario que tienen un control visible para mostrar su error
-type FormField = "name" | "species" | "location";
-const FORM_FIELDS: FormField[] = ["name", "species", "location"];
-
-const UNEXPECTED_ERROR = "Ocurrió un error inesperado. Intenta de nuevo.";
+type FormField = CampoVisible;
+const FORM_FIELDS = CAMPOS_VISIBLES;
 
 const BASE_CONTROL_CLASS = "w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 transition-all";
 
@@ -89,25 +93,23 @@ export function AddPlant() {
       submittingRef.current = false;
       setSubmitting(false);
 
-      if (!(error instanceof ApiError)) {
-        setGeneralError(UNEXPECTED_ERROR);
-        return;
-      }
-
       // 401: apiFetch ya borró la sesión y redirige a /login
-      if (error.status === 401) return;
+      if (error instanceof ApiError && error.status === 401) return;
 
       const visibleErrors: Partial<Record<FormField, string>> = {};
       const otherErrors: string[] = [];
-      for (const [field, message] of Object.entries(error.errors ?? {})) {
-        if ((FORM_FIELDS as string[]).includes(field)) {
-          visibleErrors[field as FormField] = message;
-        } else {
-          otherErrors.push(message);
+      if (error instanceof ApiError) {
+        for (const [field, message] of Object.entries(error.errors ?? {})) {
+          if (esCampoVisible(field)) {
+            visibleErrors[field] = message;
+          } else {
+            otherErrors.push(message);
+          }
         }
       }
       setFieldErrors(visibleErrors);
-      setGeneralError([error.message, ...otherErrors].join(" "));
+      // El texto crudo del backend nunca se muestra: se traduce según el estado
+      setGeneralError(mensajeErrorRegistro(error, otherErrors));
     }
   };
 
