@@ -24,11 +24,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const logout = () => {
+    localStorage.removeItem('plantpulse_token');
+    setToken(null);
+    setUser(null);
+  };
+
+  useEffect(() => {
+    setUnauthorizedHandler(() => logout());
+  }, []);
+
   useEffect(() => {
     setUnauthorizedHandler(() => {
       logout();
     });
-  }, [logout]);
+  }, []);
 
   // Inicializar estado desde localStorage al montar el componente
   useEffect(() => {
@@ -77,13 +87,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   // Función para cerrar sesión
-  const logout = () => {
-    localStorage.removeItem('plantpulse_token');
-    localStorage.removeItem('plantpulse_user');
-    setToken(null);
-    setUser(null);
-  };
-
   // Función para login
   const login = async (email: string, password: string): Promise<void> => {
     try {
