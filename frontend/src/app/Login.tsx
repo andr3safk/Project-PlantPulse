@@ -83,7 +83,7 @@ export default function Login() {
                   placeholder="tu@correo.com"
                   className="w-full rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3 pl-10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 />
-                <span className="absolute left-3 top-3 text-slate-400 text-sm">✉</span>
+                <img src="/email-9-svgrepo-com.svg" alt="" className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
               </div>
             </div>
 
@@ -101,7 +101,7 @@ export default function Login() {
                   placeholder="••••••••"
                   className="w-full rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3 pl-10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 />
-                <span className="absolute left-3 top-3 text-slate-400 text-sm">🔒</span>
+                <img src="/password-lock-svgrepo-com.svg" alt="" className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
               </div>
             </div>
 
