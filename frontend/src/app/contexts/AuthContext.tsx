@@ -135,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [token]);
 
-  const isAuthenticated = !!token && !isTokenExpired(token || '');
+  const isAuthenticated = !!token && token.length > 10 && !isTokenExpired(token || '');
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout, isAuthenticated }}>
