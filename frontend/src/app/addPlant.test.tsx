@@ -10,7 +10,15 @@ import { PlantProvider, usePlants, plantFromApi, DEFAULT_PLANT_IMAGE } from './c
 import { ApiError } from './api/client';
 import { createPlant } from './api/plants';
 import type { PlantResponse } from './api/types';
-import { MSG_REVISA_CAMPOS, MSG_SIN_CONEXION } from './utils/mensajesRegistro';
+import { toast } from 'sonner';
+import { Toaster } from './components/ui/sonner';
+import {
+  MSG_REVISA_CAMPOS,
+  MSG_SIN_CONEXION,
+  MSG_TIMEOUT,
+  MSG_GENERICO,
+  mensajeExitoRegistro,
+} from './utils/mensajesRegistro';
 
 vi.mock('./api/plants', () => ({ createPlant: vi.fn() }));
 const createPlantMock = vi.mocked(createPlant);
@@ -63,6 +71,7 @@ const renderFormulario = () => {
   render(
     <PlantProvider>
       <RouterProvider router={router} />
+      <Toaster />
     </PlantProvider>
   );
   return router;
@@ -88,6 +97,8 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // sonner guarda los avisos en un estado global: se limpian entre pruebas
+  toast.dismiss();
 });
 
 // --- Servicio createPlant -------------------------------------------------
@@ -411,5 +422,112 @@ describe('Formulario AddPlant: validación en el cliente', () => {
     await screen.findByText('El nombre es un campo obligatorio.');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(createPlantMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+// --- Mensajes de éxito y error (PLAN-20) ----------------------------------
+
+describe('Formulario AddPlant: mensajes de éxito y error', () => {
+  const textoExito = /registrada correctamente/i;
+
+  // Envía el formulario completo y espera a que aparezca el recuadro de error
+  const enviarConError = async (error: unknown) => {
+    const user = userEvent.setup();
+    createPlantMock.mockRejectedValueOnce(error);
+    const router = renderFormulario();
+    await llenarFormulario(user);
+    await user.click(botonGuardar());
+    const recuadro = await screen.findByRole('alert');
+    return { router, recuadro };
+  };
+
+  it('201: navega a "/", la planta aparece en la lista y se muestra el aviso de éxito', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockResolvedValueOnce(plantaApi());
+    const router = renderFormulario();
+
+    await llenarFormulario(user);
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'));
+    expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('Pepita');
+    expect(await screen.findByText(mensajeExitoRegistro(plantaApi().name))).toBeInTheDocument();
+  });
+
+  it('el aviso de éxito usa el nombre que devuelve la API, no el del formulario', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockResolvedValueOnce(plantaApi({ name: 'Pepita Real' }));
+    renderFormulario();
+
+    await llenarFormulario(user); // en el formulario se escribe "Pepita"
+    await user.click(botonGuardar());
+
+    expect(await screen.findByText(mensajeExitoRegistro('Pepita Real'))).toBeInTheDocument();
+    expect(screen.queryByText(mensajeExitoRegistro('Pepita'))).not.toBeInTheDocument();
+  });
+
+  it('500: recuadro con el mensaje genérico, sin navegar, botón habilitado y sin aviso de éxito', async () => {
+    const { router, recuadro } = await enviarConError(new ApiError('Error interno del servidor', 500));
+
+    expect(recuadro).toHaveTextContent(MSG_GENERICO);
+    expect(router.state.location.pathname).toBe('/add');
+    expect(screen.getByRole('button', { name: /guardar planta/i })).toBeEnabled();
+    expect(screen.queryByText(textoExito)).not.toBeInTheDocument();
+  });
+
+  it('408: recuadro con el mensaje de timeout', async () => {
+    const { recuadro } = await enviarConError(new ApiError('Solicitud cancelada por timeout', 408));
+    expect(recuadro).toHaveTextContent(MSG_TIMEOUT);
+  });
+
+  it('status 0: recuadro con el mensaje de sin conexión', async () => {
+    const { recuadro } = await enviarConError(new ApiError('Error de conexión con el servidor', 0));
+    expect(recuadro).toHaveTextContent(MSG_SIN_CONEXION);
+  });
+
+  it('400 con errors.name: mensaje bajo el nombre y recuadro con "Revisa los campos marcados."', async () => {
+    const { recuadro } = await enviarConError(
+      new ApiError('Datos de planta inválidos', 400, { name: 'El nombre ya existe.' })
+    );
+
+    expect(screen.getByText('El nombre ya existe.')).toHaveAttribute('id', 'plant-name-error');
+    expect(recuadro).toHaveTextContent(MSG_REVISA_CAMPOS);
+  });
+
+  it('400 solo con un campo no visible: el recuadro muestra el mensaje de ese campo', async () => {
+    const { recuadro } = await enviarConError(
+      new ApiError('Datos de planta inválidos', 400, { imageUrl: 'La URL de la imagen no es válida.' })
+    );
+
+    expect(recuadro).toHaveTextContent('La URL de la imagen no es válida.');
+    expect(recuadro).not.toHaveTextContent(MSG_REVISA_CAMPOS);
+  });
+
+  it('un error que no es ApiError: recuadro con el mensaje genérico', async () => {
+    const { recuadro } = await enviarConError(new Error('x'));
+    expect(recuadro).toHaveTextContent(MSG_GENERICO);
+  });
+
+  it('401: no muestra recuadro ni aviso', async () => {
+    const user = userEvent.setup();
+    createPlantMock.mockRejectedValueOnce(new ApiError('No autorizado', 401));
+    renderFormulario();
+
+    await llenarFormulario(user);
+    await user.click(botonGuardar());
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /guardar planta/i })).toBeEnabled());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(textoExito)).not.toBeInTheDocument();
+    expect(screen.queryByText('No autorizado')).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ['Error interno del servidor', new ApiError('Error interno del servidor', 500)],
+    ['Datos de planta inválidos', new ApiError('Datos de planta inválidos', 400, { name: 'El nombre ya existe.' })],
+    ['Error 502: Bad Gateway', new ApiError('Error 502: Bad Gateway', 502)],
+  ])('nunca muestra el texto crudo del backend: "%s"', async (textoCrudo, error) => {
+    await enviarConError(error);
+    expect(document.body).not.toHaveTextContent(textoCrudo);
   });
 });
