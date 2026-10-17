@@ -1,43 +1,61 @@
 # Simulador de sensores — PlantPulse
 
-Script en Node.js que genera lecturas simuladas de humedad del suelo, temperatura y luz, y las envía al backend mediante la API REST.
+Script en Node.js que genera lecturas simuladas de humedad del suelo, temperatura y luz, y las envía al backend mediante la API REST (`POST /api/readings`, con el header `X-Device-Key`).
 
-## Ejecución del simulador
+Requiere Node 22 o superior (usa `fetch` nativo).
+
+## Archivos
+
+| Archivo | Para qué |
+|---|---|
+| `generarLectura.js` | Genera cada lectura a partir de la anterior: varía poco, sube o baja, y tiende a un valor típico (PLAN-45) |
+| `ciclo.js` | Envío con cola de reintentos (PLAN-47) |
+| `index.js` | Arranca el simulador: un ciclo cada `INTERVALO_MS` |
+| `.env.example` | Variables de configuración (copiar como `.env`; `.env` no se sube al repositorio) |
+
+## Ejecución
+
+Con el backend corriendo (`npm run dev` en `backend/`), desde la carpeta `simulador/`:
 
 ```bash
-cp .env.example .env
 npm ci
+cp .env.example .env      # en PowerShell: Copy-Item .env.example .env
 npm start
 ```
 
-El simulador envía lecturas cada `INTERVALO_MS` (por defecto 10000 ms) a `POST /api/readings` con `X-Device-Key`. Si el backend responde 5xx o hay error de red, guarda la lectura en una cola en memoria (máx. 100) y reintenta antes de enviar la nueva.
+Variables de `.env`:
 
-## Validación (PLAN-49)
+| Variable | Valor por defecto | Descripción |
+|---|---|---|
+| `API_URL` | `http://localhost:3000` | URL del backend |
+| `DEVICE_KEY` | (obligatoria) | `Devices.DeviceKey`; en el seed es `plantpulse_001` |
+| `INTERVALO_MS` | `10000` | Tiempo entre lecturas, en milisegundos |
 
-Con backend corriendo (`npm run dev` en `backend/`):
-```sql
-SELECT TOP 5 * FROM SensorReadings ORDER BY RecordedAt DESC;
-SELECT Name, Status FROM Plants;
+Cada lectura muestra en consola el resultado y el estado calculado de la planta. Para detenerlo: `Ctrl+C`.
+
+## Reintentos
+
+- Si el backend no responde (o tarda más de 5 s) o responde 5xx, la lectura se guarda en una cola en memoria (máximo 100; si se llena, se descarta la más antigua).
+- En el ciclo siguiente se envían primero los pendientes, uno por uno y en orden; si uno vuelve a fallar, el ciclo se detiene sin perder nada.
+- Las respuestas 400 (datos inválidos) y 401 (clave inválida) no se reintentan.
+- La cola vive en memoria: si se detiene el simulador, las lecturas pendientes se pierden.
+
+## Pruebas
+
+```bash
+npm run test:run
 ```
 
-## Estado inicial
+## Validar la comunicación (PLAN-49)
 
-Estado: funcional para desarrollo. No es entregable final (Sprint 2: notificaciones automáticas, historial, gráficos avanzados).
-
----
-Estado: pendiente de implementar.
-
-## PLAN-49 — Validar comunicación
-
-Pasos para verificar que el simulador y el backend se comunican correctamente:
-
-1. Iniciar el backend (`node backend/src/index.js`) y confirmar conexión a SQL Server.
-2. Consultar lecturas recientes:
+1. Iniciar el backend y el simulador como se indica arriba.
+2. En SQL Server Management Studio, ver las lecturas recientes:
    ```sql
    SELECT TOP 10 * FROM SensorReadings ORDER BY RecordedAt DESC;
    ```
-3. Verificar estado de plantas vinculadas:
+3. Ver el estado de la planta vinculada al dispositivo (en el seed, la Monstera) y del dispositivo:
    ```sql
    SELECT Id, Name, Status, DeviceId FROM Plants;
+   SELECT DeviceKey, Status, LastSeenAt FROM Devices;
    ```
-4. Confirmar que el simulador envía datos y aparecen en `SensorReadings`.
+4. Detener el backend con el simulador corriendo: el simulador encola las lecturas. Al volver a arrancar el backend, las envía en orden.
