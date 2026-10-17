@@ -1,14 +1,27 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { Dashboard } from './Dashboard'
 import { PlantProvider } from './contexts/PlantContext'
+import { AuthProvider } from './contexts/AuthContext'
+
+// Mock localStorage para AuthProvider
+const localStorageMock = {
+  getItem: vi.fn(),
+  setItem: vi.fn(),
+  removeItem: vi.fn(),
+  clear: vi.fn(),
+};
+Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+localStorageMock.getItem.mockReturnValue(null);
 
 const renderDashboard = () => render(
   <MemoryRouter>
     <PlantProvider>
-      <Dashboard />
+      <AuthProvider>
+        <Dashboard />
+      </AuthProvider>
     </PlantProvider>
   </MemoryRouter>
 )
