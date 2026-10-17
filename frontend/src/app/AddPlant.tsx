@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router";
 import { usePlants } from "./contexts/PlantContext";
 import { createPlant } from "./api/plants";
 import { ApiError } from "./api/client";
+import { validarPlanta, normalizarTexto, NOMBRE_MAX } from "./utils/validarPlanta";
 
 const SPECIES_OPTIONS = [
   "Monstera Deliciosa",
@@ -55,6 +56,21 @@ export function AddPlant() {
     e.preventDefault();
     if (submittingRef.current) return;
 
+    // Validación en el cliente: con errores no se llama a la API
+    const errores = validarPlanta(formData);
+    const clientErrors: Partial<Record<FormField, string>> = {};
+    for (const field of FORM_FIELDS) {
+      if (errores[field]) clientErrors[field] = errores[field];
+    }
+    // FORM_FIELDS está en orden nombre → especie → ubicación: el foco va al primer error
+    const firstInvalid = FORM_FIELDS.find((field) => clientErrors[field]);
+    if (firstInvalid) {
+      setFieldErrors(clientErrors);
+      setGeneralError(null);
+      document.getElementById(`plant-${firstInvalid}`)?.focus();
+      return;
+    }
+
     submittingRef.current = true;
     setSubmitting(true);
     setFieldErrors({});
@@ -62,9 +78,9 @@ export function AddPlant() {
 
     try {
       const plant = await createPlant({
-        name: formData.name,
-        species: formData.species,
-        location: formData.location,
+        name: normalizarTexto(formData.name),
+        species: normalizarTexto(formData.species),
+        location: normalizarTexto(formData.location),
       });
       addPlantFromApi(plant);
       navigate("/");
@@ -125,7 +141,8 @@ export function AddPlant() {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-green-100 dark:border-slate-800 shadow-sm transition-colors duration-300">
-        <form onSubmit={handleSave} className="space-y-6">
+        {/* noValidate: los mensajes los muestra validarPlanta, no el globo nativo del navegador */}
+        <form onSubmit={handleSave} noValidate className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label htmlFor="plant-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">Nombre o Apodo</label>
@@ -136,7 +153,8 @@ export function AddPlant() {
                 className={`${BASE_CONTROL_CLASS} ${borderClass("name")} text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
                 value={formData.name}
                 onChange={e => handleChange("name", e.target.value)}
-                required
+                maxLength={NOMBRE_MAX}
+                aria-required="true"
                 {...errorProps("name")}
               />
               {renderFieldError("name")}
@@ -149,7 +167,7 @@ export function AddPlant() {
                 className={`${BASE_CONTROL_CLASS} ${borderClass("species")} text-slate-800 dark:text-slate-100`}
                 value={formData.species}
                 onChange={e => handleChange("species", e.target.value)}
-                required
+                aria-required="true"
                 {...errorProps("species")}
               >
                 <option value="">Selecciona una especie</option>
