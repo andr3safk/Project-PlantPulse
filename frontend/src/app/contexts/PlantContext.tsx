@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { PlantResponse } from "../api/types";
+import { listPlants } from "../api/plants";
+import { ApiError } from "../api/client";
 
 // Imagen local que se muestra cuando la planta no tiene foto (imageUrl null)
 export const DEFAULT_PLANT_IMAGE = "/plant-placeholder.svg";
@@ -20,41 +22,22 @@ export type Plant = {
   location?: string;
 };
 
-const INITIAL_PLANTS: Plant[] = [
-  {
-    id: "1",
-    name: "Monstruo",
-    species: "Monstera Deliciosa",
-    image: "https://images.unsplash.com/photo-1654179280639-3de6d9d7f996?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtb25zdGVyYSUyMHBsYW50JTIwaG9tZXxlbnwxfHx8fDE3NzMxNzE3MDd8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    status: "healthy",
-    sensors: { moisture: 65, light: 80, temperature: 24, humidity: 55 },
-    lastWatered: "Hace 2 días",
-    location: "sala",
-  },
-  {
-    id: "2",
-    name: "Serpientina",
-    species: "Sansevieria Trifasciata",
-    image: "https://images.unsplash.com/photo-1601467860749-56d59825dcb7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbmFrZSUyMHBsYW50JTIwcG90JTIwaW5kb29yfGVufDF8fHx8MTc3MzI0MDQyNnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    status: "warning",
-    sensors: { moisture: 15, light: 40, temperature: 22, humidity: 40 },
-    lastWatered: "Hace 3 semanas",
-    location: "dormitorio",
-  },
-  {
-    id: "3",
-    name: "Higuera",
-    species: "Ficus Lyrata",
-    image: "https://images.unsplash.com/photo-1608329857883-5998ebea6f76?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxmaWRkbGUlMjBsZWFmJTIwZmlnJTIwaW5kb29yfGVufDF8fHx8MTc3MzI0MDQyNXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    status: "healthy",
-    sensors: { moisture: 45, light: 90, temperature: 26, humidity: 60 },
-    lastWatered: "Hace 5 días",
-    location: "sala",
-  }
-];
+// Estado de la carga de la lista desde GET /api/plants
+export type EstadoCarga = "idle" | "loading" | "ready" | "error";
 
-// Convierte la planta que devuelve la API al tipo Plant que usa la interfaz
-export function plantFromApi(plant: PlantResponse): Plant {
+// Lecturas provisionales hasta PLAN-39 (la API todavía no devuelve la última lectura)
+function sensoresProvisionales(): Plant["sensors"] {
+  return {
+    moisture: Math.floor(Math.random() * 40) + 40, // 40-80
+    light: Math.floor(Math.random() * 50) + 30, // 30-80
+    temperature: Math.floor(Math.random() * 10) + 18, // 18-28
+    humidity: Math.floor(Math.random() * 40) + 30, // 30-70
+  };
+}
+
+// Convierte la planta que devuelve la API al tipo Plant que usa la interfaz.
+// Si se pasan sensores (planta que ya estaba en pantalla), se conservan para que no salten.
+export function plantFromApi(plant: PlantResponse, sensors?: Plant["sensors"]): Plant {
   return {
     id: plant.id,
     name: plant.name,
@@ -65,20 +48,17 @@ export function plantFromApi(plant: PlantResponse): Plant {
     lastWatered: plant.lastWateredAt === null
       ? "Sin registro"
       : new Date(plant.lastWateredAt).toLocaleDateString("es-CO"),
-    // Provisional hasta PLAN-39: lecturas reales desde la API
-    sensors: {
-      moisture: Math.floor(Math.random() * 40) + 40, // 40-80
-      light: Math.floor(Math.random() * 50) + 30, // 30-80
-      temperature: Math.floor(Math.random() * 10) + 18, // 18-28
-      humidity: Math.floor(Math.random() * 40) + 30, // 30-70
-    },
+    sensors: sensors ?? sensoresProvisionales(),
   };
 }
 
 type PlantContextType = {
   plants: Plant[];
+  estadoCarga: EstadoCarga;
+  errorCarga: unknown;
+  cargarPlantas: () => Promise<void>;
   addPlantFromApi: (plant: PlantResponse) => void;
-  updatePlant: (id: string, plant: Partial<Plant>) => void;
+  replacePlantFromApi: (plant: PlantResponse) => void;
   deletePlant: (id: string) => void;
   varySensors: () => void;
 };
@@ -86,25 +66,58 @@ type PlantContextType = {
 const PlantContext = createContext<PlantContextType | undefined>(undefined);
 
 export function PlantProvider({ children }: { children: React.ReactNode }) {
-  const [plants, setPlants] = useState<Plant[]>(INITIAL_PLANTS);
+  const [plants, setPlants] = useState<Plant[]>([]);
+  const [estadoCarga, setEstadoCarga] = useState<EstadoCarga>("idle");
+  const [errorCarga, setErrorCarga] = useState<unknown>(null);
+  // Cada carga recibe un número; solo la más reciente puede actualizar el estado
+  const cargaActual = useRef(0);
+
+  // Carga la lista del usuario desde GET /api/plants (la llama el Dashboard al montarse).
+  // Mientras carga se conserva la lista anterior, así la pantalla no parpadea al volver de /add.
+  const cargarPlantas = useCallback(async () => {
+    const id = ++cargaActual.current;
+    setEstadoCarga("loading");
+    setErrorCarga(null);
+    try {
+      const lista = await listPlants();
+      if (id !== cargaActual.current) return;
+      setPlants((prev) => {
+        const sensoresPrevios = new Map(prev.map((p) => [p.id, p.sensors]));
+        return lista.map((p) => plantFromApi(p, sensoresPrevios.get(p.id)));
+      });
+      setEstadoCarga("ready");
+    } catch (error) {
+      if (id !== cargaActual.current) return;
+      // 401: apiFetch ya cerró la sesión y redirige a /login; no se muestra error
+      if (error instanceof ApiError && error.status === 401) {
+        setEstadoCarga("idle");
+        return;
+      }
+      setErrorCarga(error);
+      setEstadoCarga("error");
+    }
+  }, []);
 
   // Agrega al inicio la planta creada en la API (el backend ordena por CreatedAt DESC).
-  // Provisional: PLAN-39 cargará la lista completa desde GET /api/plants.
   const addPlantFromApi = (plant: PlantResponse) => {
-    setPlants((prev) => [plantFromApi(plant), ...prev]);
+    setPlants((prev) => [plantFromApi(plant), ...prev.filter((p) => p.id !== plant.id)]);
   };
 
-  const updatePlant = (id: string, updatedData: Partial<Plant>) => {
-    setPlants((prev) => prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)));
+  // Reemplaza una planta con la respuesta de la API (PUT), conservando sus sensores
+  const replacePlantFromApi = (plant: PlantResponse) => {
+    setPlants((prev) => prev.map((p) => (p.id === plant.id ? plantFromApi(plant, p.sensors) : p)));
   };
 
+  // Provisional hasta PLAN-15 (PLAN-28): solo quita la planta de la pantalla, no llama a la API
   const deletePlant = (id: string) => {
     setPlants((prev) => prev.filter((p) => p.id !== id));
   };
 
+  // Provisional hasta PLAN-39/48: varía las lecturas en pantalla.
+  // No toca status: el estado real lo calcula el backend (PLAN-46) y llega en la API.
   const varySensors = () => {
     setPlants((prev) => 
-      prev.map(p => {
+      prev.map((p) => {
         const vary = (val: number, max: number, change: number = 2) => {
           const delta = Math.floor(Math.random() * (change * 2 + 1)) - change;
           return Math.max(0, Math.min(max, val + delta));
@@ -117,10 +130,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
           humidity: vary(p.sensors.humidity, 100),
         };
 
-        // Update status based on moisture
-        const status = newSensors.moisture < 20 ? "warning" : "healthy";
-
-        return { ...p, sensors: newSensors, status };
+        return { ...p, sensors: newSensors };
       })
     );
   };
@@ -134,7 +144,9 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <PlantContext.Provider value={{ plants, addPlantFromApi, updatePlant, deletePlant, varySensors }}>
+    <PlantContext.Provider
+      value={{ plants, estadoCarga, errorCarga, cargarPlantas, addPlantFromApi, replacePlantFromApi, deletePlant, varySensors }}
+    >
       {children}
     </PlantContext.Provider>
   );

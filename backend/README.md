@@ -43,7 +43,7 @@ Cada usuario solo ve y modifica **sus** plantas: el id del usuario sale del toke
   "species": "Monstera deliciosa",
   "imageUrl": null,
   "status": "healthy",
-  "location": "Sala",
+  "location": "sala",
   "lastWateredAt": null,
   "deviceId": "22222222-2222-2222-2222-222222222222",
   "createdAt": "2026-10-16T20:00:00.000Z",
@@ -67,7 +67,7 @@ Cada usuario solo ve y modifica **sus** plantas: el id del usuario sale del toke
 - `location` o `imageUrl` vacíos, `null` o ausentes se guardan como `null`.
 
 ```json
-{ "name": "Mi planta", "species": "Ficus lyrata", "location": "Sala", "imageUrl": "https://ejemplo.com/ficus.jpg" }
+{ "name": "Mi planta", "species": "Ficus lyrata", "location": "sala", "imageUrl": "https://ejemplo.com/ficus.jpg" }
 ```
 
 #### `GET /api/plants`
