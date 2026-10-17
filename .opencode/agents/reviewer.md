@@ -2,7 +2,7 @@
 description: Audita los cambios de PlantPulse sin modificar archivos
 mode: subagent
 temperature: 0.1
-model: openai/gpt-oss-20b:free
+model: openrouter/unbiased/pareto-26.9
 permission:
   edit: deny
   bash: deny
