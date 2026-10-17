@@ -25,7 +25,7 @@ Flujo de datos: **simulador de sensores → backend (API REST) → SQL Server �
 
 | Capa | Tecnología |
 |---|---|
-| Frontend | React + Vite (`frontend/`). El prototipo está en TypeScript y usa Tailwind |
+| Frontend | React + Vite con TypeScript y Tailwind CSS (`frontend/`), decisión del PO del 17/10/2026. Antes de cada PR del frontend: `npm run typecheck`, `npm run test:run` y `npm run build` |
 | Backend | Node.js + Express, API REST (`backend/`) |
 | Base de datos | Microsoft SQL Server; scripts en `backend/database/` |
 | Autenticación | bcrypt + JWT; secretos en `.env` (nunca en el repositorio, solo `.env.example`) |
@@ -55,6 +55,7 @@ Ver `CONTRIBUTING.md`. Resumen:
 # Frontend (terminal de Antigravity o VS Code, desde frontend/)
 npm ci            # instalar dependencias
 npm run dev       # servidor de desarrollo en http://localhost:5173
+npm run typecheck # revisar tipos de TypeScript
 npm run test:run  # pruebas
 npm run build     # compilar
 ```

@@ -1,5 +1,5 @@
 import { Link, NavLink, Outlet } from "react-router";
-import { Sprout, LayoutDashboard, PlusCircle, ActivitySquare, Settings as SettingsIcon, Bell, Search, Menu, LogOut } from "lucide-react";
+import { Sprout, LayoutDashboard, PlusCircle, Settings as SettingsIcon, Bell, Search, Menu, LogOut } from "lucide-react";
 import { useState } from "react";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { useAuth } from "./contexts/AuthContext";
@@ -24,7 +24,6 @@ export function Layout() {
 
         <nav className="flex-1 px-4 py-4 space-y-1">
           <NavItem to="/" icon={<LayoutDashboard size={20} />} label="Mis Plantas" />
-          <NavItem to="/diagnosis" icon={<ActivitySquare size={20} />} label="Diagnóstico Temprano" />
           <NavItem to="/add" icon={<PlusCircle size={20} />} label="Añadir Planta" />
         </nav>
 
@@ -55,7 +54,6 @@ export function Layout() {
             onClick={(e) => e.stopPropagation()}
           >
             <MobileNavItem to="/" icon={<LayoutDashboard size={20} />} label="Mis Plantas" onClick={() => setMobileMenuOpen(false)} />
-            <MobileNavItem to="/diagnosis" icon={<ActivitySquare size={20} />} label="Diagnóstico Temprano" onClick={() => setMobileMenuOpen(false)} />
             <MobileNavItem to="/add" icon={<PlusCircle size={20} />} label="Añadir Planta" onClick={() => setMobileMenuOpen(false)} />
             <div className="my-1 border-t border-slate-100 dark:border-slate-800"></div>
             <MobileNavItem to="/settings" icon={<SettingsIcon size={20} />} label="Configuración" onClick={() => setMobileMenuOpen(false)} />

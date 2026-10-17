@@ -1,8 +1,13 @@
+#define STRINGIFY(x) #x
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include "secrets.h"
 
-const char* server = "http://" SERVER_IP "/api/devices/heartbeat";
+#ifndef STRINGIFY
+#define STRINGIFY(x) #x
+#endif
+
+const char* server = "http://" SERVER_IP ":" STRINGIFY(SERVER_PORT) "/api/devices/heartbeat";
 
 void setup() {
   Serial.begin(115200);

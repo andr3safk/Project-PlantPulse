@@ -11,7 +11,7 @@ Pasos para verificar que el simulador y el backend se comunican correctamente:
 1. Iniciar el backend (`node backend/src/index.js`) y confirmar conexión a SQL Server.
 2. Consultar lecturas recientes:
    ```sql
-   SELECT TOP 10 * FROM SensorReadings ORDER BY Timestamp DESC;
+   SELECT TOP 10 * FROM SensorReadings ORDER BY RecordedAt DESC;
    ```
 3. Verificar estado de plantas vinculadas:
    ```sql

@@ -4,7 +4,8 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
-import { deviceAuth } from './middleware/deviceAuth.js';
+import plantRoutes from './routes/plants.js';
+import deviceRoutes from './routes/devices.js';
 import { pool } from './db.js';
 
 dotenv.config();
@@ -17,23 +18,8 @@ app.use(express.json());
 
 // Rutas
 app.use('/api/auth', authRoutes);
-
-app.post('/api/devices/heartbeat', deviceAuth, async (req, res) => {
-  try {
-    const deviceId = req.device.id;
-    await pool.request()
-      .input('deviceId', deviceId)
-      .query("UPDATE Devices SET LastSeenAt = SYSUTCDATETIME(), Status = 'online' WHERE Id = @deviceId");
-    const result = await pool.request()
-      .input('deviceId', deviceId)
-      .query("SELECT CAST(Id AS NVARCHAR(50)) AS deviceId, Status AS status, LastSeenAt AS lastSeenAt FROM Devices WHERE Id = @deviceId");
-    const row = result.recordset[0];
-    res.json({ deviceId: row.deviceId, status: row.status, lastSeenAt: row.lastSeenAt });
-  } catch (err) {
-    console.error('Error heartbeat:', err);
-    res.status(500).json({ message: 'Error interno del servidor' });
-  }
-});
+app.use('/api/plants', plantRoutes);
+app.use('/api/devices', deviceRoutes);
 
 // Ruta de verificacion
 app.get('/api/health', (req, res) => {

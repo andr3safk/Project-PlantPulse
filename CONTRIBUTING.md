@@ -51,7 +51,7 @@ Haz commits pequeños: un cambio lógico por commit.
 ## 3. Pull Requests
 
 - Todo cambio de **código o configuración** entra a `develop` por Pull Request, y lo revisa el otro integrante.
-- Antes de abrir un PR, verifica que el proyecto instala (`npm ci`) y que las pruebas pasan (`npm run test:run`).
+- Antes de abrir un PR, verifica que el proyecto instala (`npm ci`) y que las pruebas pasan (`npm run test:run`). En el frontend, verifica además los tipos (`npm run typecheck`) y la compilación (`npm run build`).
 - La descripción del PR indica qué se hizo, qué subtareas de Jira incluye y cómo probarlo.
 
 ## 4. Excepción: cambios solo de documentación
