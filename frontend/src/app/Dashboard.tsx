@@ -1,12 +1,14 @@
-import React, { useState } from "react";
-import { Droplets, Sun, Thermometer, Wind, AlertCircle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Droplets, Sun, Thermometer, Wind, AlertCircle, AlertTriangle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
 import { usePlants, Plant } from "./contexts/PlantContext";
 import { validarPlanta, normalizarTexto, type DatosPlanta, type ErroresPlanta } from "./utils/validarPlanta";
+import { MSG_ERROR_CARGA_LISTA, mensajeErrorCarga } from "./utils/mensajesEdicion";
+import { etiquetaUbicacion } from "./utils/opcionesPlanta";
 
 export function Dashboard() {
-  const { plants, deletePlant, updatePlant } = usePlants();
+  const { plants, estadoCarga, errorCarga, cargarPlantas, deletePlant, updatePlant } = usePlants();
   // editingPlant guarda la planta original; editForm, los valores que el usuario está editando.
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
   const [editForm, setEditForm] = useState<DatosPlanta>({ name: "", species: "" });
@@ -14,8 +16,13 @@ export function Dashboard() {
   const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
 
+  // La lista se pide a la API cada vez que se entra al Dashboard
+  useEffect(() => {
+    void cargarPlantas();
+  }, [cargarPlantas]);
+
   const healthyCount = plants.filter(p => p.status === 'healthy').length;
-  const warningCount = plants.filter(p => p.status === 'warning').length;
+  const attentionCount = plants.filter(p => p.status !== 'healthy').length;
 
   const editHasChanges = editingPlant !== null && (
     normalizarTexto(editForm.name) !== normalizarTexto(editingPlant.name) ||
@@ -84,9 +91,36 @@ export function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <SummaryCard title="Total Plantas" value={plants.length.toString()} icon={<Droplets className="w-5 h-5 text-blue-500 dark:text-blue-400" />} bgColor="bg-blue-50 dark:bg-blue-900/20" />
         <SummaryCard title="Saludables" value={healthyCount.toString()} icon={<CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />} bgColor="bg-emerald-50 dark:bg-emerald-900/20" />
-        <SummaryCard title="Atención Req." value={warningCount.toString()} icon={<AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400" />} bgColor="bg-amber-50 dark:bg-amber-900/20" />
+        <SummaryCard title="Atención Req." value={attentionCount.toString()} icon={<AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400" />} bgColor="bg-amber-50 dark:bg-amber-900/20" />
         <SummaryCard title="Sensores Activos" value={(plants.length * 4).toString()} icon={<Wind className="w-5 h-5 text-purple-500 dark:text-purple-400" />} bgColor="bg-purple-50 dark:bg-purple-900/20" />
       </div>
+
+      {/* Estado de la carga de la lista */}
+      {estadoCarga === "error" && (
+        <div role="alert" className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-4 py-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+          <span>{mensajeErrorCarga(errorCarga, MSG_ERROR_CARGA_LISTA)}</span>
+          <button
+            type="button"
+            onClick={() => void cargarPlantas()}
+            className="self-start sm:self-auto px-4 py-2 bg-white dark:bg-slate-900 border border-red-200 dark:border-red-900 rounded-lg font-medium hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {estadoCarga === "loading" && plants.length === 0 && (
+        <p role="status" className="text-center text-slate-500 dark:text-slate-400 py-12">Cargando tus plantas...</p>
+      )}
+
+      {estadoCarga === "ready" && plants.length === 0 && (
+        <div className="text-center py-12 space-y-3">
+          <p className="text-slate-500 dark:text-slate-400">Aún no tienes plantas registradas.</p>
+          <Link to="/add" className="inline-block text-emerald-600 dark:text-emerald-400 font-semibold hover:text-emerald-700 dark:hover:text-emerald-300">
+            Registrar mi primera planta
+          </Link>
+        </div>
+      )}
 
       {/* Plant Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -235,6 +269,8 @@ export function Dashboard() {
                   <div className="flex items-center gap-2">
                     {detailsPlant.status === 'healthy' ? (
                       <><CheckCircle2 size={18} className="text-emerald-500" /><span className="font-semibold text-slate-700 dark:text-slate-200">Saludable</span></>
+                    ) : detailsPlant.status === 'critical' ? (
+                      <><AlertTriangle size={18} className="text-red-500" /><span className="font-semibold text-slate-700 dark:text-slate-200">Estado Crítico</span></>
                     ) : (
                       <><AlertCircle size={18} className="text-amber-500" /><span className="font-semibold text-slate-700 dark:text-slate-200">Requiere Atención</span></>
                     )}
@@ -242,7 +278,7 @@ export function Dashboard() {
                 </div>
                 <div className="bg-slate-50 dark:bg-slate-800 p-4 rounded-2xl">
                   <p className="text-xs text-slate-500 dark:text-slate-400 mb-1">Ubicación</p>
-                  <p className="font-semibold text-slate-700 dark:text-slate-200 capitalize">{detailsPlant.location || 'No asignada'}</p>
+                  <p className="font-semibold text-slate-700 dark:text-slate-200">{etiquetaUbicacion(detailsPlant.location)}</p>
                 </div>
               </div>
               
@@ -299,8 +335,15 @@ function SummaryCard({ title, value, icon, bgColor }: { title: string, value: st
   );
 }
 
+// Insignia de estado de la tarjeta. Los textos de warning se revisan en PLAN-39/48 con las lecturas reales.
+const INSIGNIA_ESTADO: Record<Plant["status"], { texto: string; clase: string; Icono: typeof CheckCircle2 }> = {
+  healthy: { texto: "Saludable", clase: "bg-emerald-500/90 text-white", Icono: CheckCircle2 },
+  warning: { texto: "Necesita Agua", clase: "bg-amber-500/90 text-white", Icono: AlertCircle },
+  critical: { texto: "Estado Crítico", clase: "bg-red-600/90 text-white", Icono: AlertTriangle },
+};
+
 function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; onEdit: () => void; onDelete: () => void; onViewDetails: () => void; }) {
-  const isWarning = plant.status === 'warning';
+  const insignia = INSIGNIA_ESTADO[plant.status];
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-3xl border border-green-100/60 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all duration-300">
@@ -314,19 +357,18 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
         <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent"></div>
         
         <div className="absolute top-4 right-4 flex gap-2">
-          <div className={`px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md flex items-center gap-1.5 shadow-sm
-            ${isWarning ? 'bg-amber-500/90 text-white' : 'bg-emerald-500/90 text-white'}
-          `}>
-            {isWarning ? <AlertCircle className="w-3.5 h-3.5" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-            {isWarning ? 'Necesita Agua' : 'Saludable'}
+          <div className={`px-3 py-1 rounded-full text-xs font-semibold backdrop-blur-md flex items-center gap-1.5 shadow-sm ${insignia.clase}`}>
+            <insignia.Icono className="w-3.5 h-3.5" />
+            {insignia.texto}
           </div>
         </div>
 
-        <div className="absolute top-4 left-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-4 left-4 flex gap-2 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
           <button 
             onClick={onEdit}
             className="p-2 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full text-white transition-colors"
             title="Editar"
+            aria-label="Editar"
           >
             <Edit2 size={16} />
           </button>
@@ -334,6 +376,7 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
             onClick={onDelete}
             className="p-2 bg-red-500/80 hover:bg-red-500 backdrop-blur-md rounded-full text-white transition-colors"
             title="Eliminar"
+            aria-label="Eliminar"
           >
             <Trash2 size={16} />
           </button>
