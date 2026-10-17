@@ -1,50 +1,60 @@
+// Simulador de sensores de PlantPulse — PLAN-45 / PLAN-47
+// Cada INTERVALO_MS genera una lectura y la envía a POST /api/readings con X-Device-Key.
+// Si el backend no responde o responde 5xx, la guarda en una cola (máx. 100) y la reintenta.
 import dotenv from 'dotenv';
+import { generarLectura, LECTURA_INICIAL } from './generarLectura.js';
+import { crearCola, ejecutarCiclo } from './ciclo.js';
+
 dotenv.config();
 
-const { API_URL, DEVICE_KEY, INTERVALO_MS } = process.env;
-let cola = [];
+const API_URL = (process.env.API_URL || 'http://localhost:3000').replace(/\/+$/, '');
+const DEVICE_KEY = process.env.DEVICE_KEY;
+const INTERVALO_MS = Number(process.env.INTERVALO_MS) || 10000;
+const TIEMPO_ESPERA_MS = 5000;
 
-function enviarLectura(lectura) {
-  return fetch(`${API_URL}/api/readings`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Device-Key': DEVICE_KEY,
-    },
-    body: JSON.stringify(lectura),
-  }).then(r => ({ ok: r.ok, status: r.status, body: r.status === 201 ? r.json() : null }))
-    .catch(() => ({ ok: false, status: 0 }));
+if (!DEVICE_KEY) {
+  console.error('Falta DEVICE_KEY. Copia .env.example como .env y revisa los valores.');
+  process.exit(1);
 }
 
-async function ciclo() {
+const hora = () => new Date().toLocaleTimeString();
+const log = (texto) => console.log(`[${hora()}] ${texto}`);
+
+// Nunca lanza: un fallo de red o un timeout se devuelven como status 0
+async function enviar(lectura) {
   try {
-    const { generarLectura } = await import('./generarLectura.js');
-    const lectura = generarLectura();
-    const res = await enviarLectura(lectura);
-    if (res.ok) console.log('201', res.body?.plantStatus);
-    else if (res.status === 400 || res.status === 401) console.log(res.status, 'error fijo');
-    else {
-      // reintentar: encolar
-      cola.push(lectura);
-      if (cola.length > 100) cola.shift();
-    }
-  } catch (e) {
-    console.error('Error ciclo:', e.message);
+    const res = await fetch(`${API_URL}/api/readings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Device-Key': DEVICE_KEY },
+      body: JSON.stringify(lectura),
+      signal: AbortSignal.timeout(TIEMPO_ESPERA_MS),
+    });
+    const body = await res.json().catch(() => null);
+    return { status: res.status, body };
+  } catch {
+    return { status: 0, body: null };
   }
 }
 
-setInterval(() => {
-  while (cola.length > 0) {
-    const pend = cola.shift();
-    enviarLectura(pend).then(r => {
-      if (r.ok) console.log('Reintento 201', r.body?.plantStatus);
-      else console.log('Reintento fallido', r.status);
-    });
-  }
-  ciclo();
-}, Number(INTERVALO_MS) || 10000);
+const cola = crearCola();
+let anterior = LECTURA_INICIAL;
+let temporizador = null;
+let detenido = false;
+
+// El siguiente ciclo se programa cuando termina el actual: nunca se solapan
+async function ciclo() {
+  const lectura = generarLectura(anterior);
+  anterior = lectura;
+  await ejecutarCiclo({ cola, enviar, lectura, log });
+  if (!detenido) temporizador = setTimeout(ciclo, INTERVALO_MS);
+}
 
 process.on('SIGINT', () => {
-  console.log('Cierro simulador');
+  detenido = true;
+  clearTimeout(temporizador);
+  log(`Simulador detenido. Lecturas en cola sin enviar: ${cola.tamano}`);
   process.exit(0);
 });
+
+log(`Simulador iniciado: ${API_URL}/api/readings cada ${INTERVALO_MS} ms (Ctrl+C para detener)`);
+ciclo();
