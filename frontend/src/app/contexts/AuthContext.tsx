@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const loginData: LoginRequest = { email, password };
       const response = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        body: loginData,
+        body: JSON.stringify(loginData),
       });
       
       localStorage.setItem('plantpulse_token', response.token);
