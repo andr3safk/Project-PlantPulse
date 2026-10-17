@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" role="img" aria-label="Planta sin foto">
+  <rect width="400" height="300" fill="#ecfdf5"/>
+  <path d="M200 190 C200 150 196 125 200 95" fill="none" stroke="#059669" stroke-width="6" stroke-linecap="round"/>
+  <path d="M200 140 C165 140 140 115 135 85 C170 85 197 108 200 140 Z" fill="#6ee7b7"/>
+  <path d="M200 120 C232 118 255 95 262 65 C228 66 203 88 200 120 Z" fill="#34d399"/>
+  <path d="M150 185 H250 L238 250 H162 Z" fill="#a7f3d0"/>
+  <rect x="142" y="178" width="116" height="16" rx="5" fill="#6ee7b7"/>
+</svg>

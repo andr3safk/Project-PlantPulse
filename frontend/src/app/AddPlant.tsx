@@ -1,9 +1,11 @@
-import { useState } from "react";
-import { Camera, Save, ArrowLeft, Cpu } from "lucide-react";
+import { useRef, useState } from "react";
+import { Save, ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "react-router";
 import { usePlants } from "./contexts/PlantContext";
+import { createPlant } from "./api/plants";
+import { ApiError } from "./api/client";
 
-const PREDEFINED_SPECIES = [
+const SPECIES_OPTIONS = [
   "Monstera Deliciosa",
   "Ficus Elastica",
   "Pothos",
@@ -15,37 +17,103 @@ const PREDEFINED_SPECIES = [
   "Spatifilo (Cuna de Moisés)"
 ];
 
+// Campos del formulario que tienen un control visible para mostrar su error
+type FormField = "name" | "species" | "location";
+const FORM_FIELDS: FormField[] = ["name", "species", "location"];
+
+const UNEXPECTED_ERROR = "Ocurrió un error inesperado. Intenta de nuevo.";
+
+const BASE_CONTROL_CLASS = "w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 transition-all";
+
 export function AddPlant() {
   const navigate = useNavigate();
-  const { addPlant } = usePlants();
+  const { addPlantFromApi } = usePlants();
   const [formData, setFormData] = useState({
     name: "",
-    species: "Detección Automática",
-    location: "sala",
-    sensorId: ""
+    species: "",
+    location: "sala"
   });
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  // El ref evita un doble envío antes de que React vuelva a renderizar el botón deshabilitado
+  const submittingRef = useRef(false);
 
-  const handleSave = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    let finalSpecies = formData.species;
-    if (finalSpecies === "Detección Automática") {
-      finalSpecies = PREDEFINED_SPECIES[Math.floor(Math.random() * PREDEFINED_SPECIES.length)];
+  const handleChange = (field: FormField, value: string) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+    // Al corregir un campo se borra solo su error
+    if (fieldErrors[field]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
     }
-
-    addPlant({
-      name: formData.name,
-      species: finalSpecies,
-      location: formData.location,
-      sensorId: formData.sensorId,
-      image: "https://images.unsplash.com/photo-1629426956944-40c6a994111a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxob3VzZSUyMHBsYW50JTIwaW5kb29yfGVufDF8fHx8MTc3Njk3NjA5N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral",
-    });
-    navigate("/");
   };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (submittingRef.current) return;
+
+    submittingRef.current = true;
+    setSubmitting(true);
+    setFieldErrors({});
+    setGeneralError(null);
+
+    try {
+      const plant = await createPlant({
+        name: formData.name,
+        species: formData.species,
+        location: formData.location,
+      });
+      addPlantFromApi(plant);
+      navigate("/");
+      // Éxito: el componente se desmonta al navegar, no se actualiza más estado
+    } catch (error) {
+      submittingRef.current = false;
+      setSubmitting(false);
+
+      if (!(error instanceof ApiError)) {
+        setGeneralError(UNEXPECTED_ERROR);
+        return;
+      }
+
+      // 401: apiFetch ya borró la sesión y redirige a /login
+      if (error.status === 401) return;
+
+      const visibleErrors: Partial<Record<FormField, string>> = {};
+      const otherErrors: string[] = [];
+      for (const [field, message] of Object.entries(error.errors ?? {})) {
+        if ((FORM_FIELDS as string[]).includes(field)) {
+          visibleErrors[field as FormField] = message;
+        } else {
+          otherErrors.push(message);
+        }
+      }
+      setFieldErrors(visibleErrors);
+      setGeneralError([error.message, ...otherErrors].join(" "));
+    }
+  };
+
+  // Atributos de accesibilidad y borde rojo para un campo con error
+  const errorProps = (field: FormField) =>
+    fieldErrors[field]
+      ? { "aria-invalid": true, "aria-describedby": `plant-${field}-error` }
+      : {};
+
+  const borderClass = (field: FormField) =>
+    fieldErrors[field] ? "border-red-500" : "border-slate-200 dark:border-slate-700";
+
+  const renderFieldError = (field: FormField) =>
+    fieldErrors[field] && (
+      <p id={`plant-${field}-error`} className="text-red-600 dark:text-red-400 text-sm">
+        {fieldErrors[field]}
+      </p>
+    );
 
   return (
     <div className="max-w-2xl mx-auto space-y-6 animate-in fade-in slide-in-from-right-8 duration-500">
-      
+
       <div className="flex items-center gap-4 mb-8">
         <Link to="/" className="p-2 bg-white dark:bg-slate-900 rounded-full border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors">
           <ArrowLeft size={20} />
@@ -57,49 +125,50 @@ export function AddPlant() {
       </div>
 
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 md:p-8 border border-green-100 dark:border-slate-800 shadow-sm transition-colors duration-300">
-        
-        <div className="mb-8 flex justify-center">
-          <div className="w-32 h-32 bg-emerald-50 dark:bg-emerald-900/20 rounded-full border-2 border-dashed border-emerald-200 dark:border-emerald-800 flex flex-col items-center justify-center text-emerald-500 dark:text-emerald-400 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors">
-            <Camera className="w-8 h-8 mb-2" />
-            <span className="text-xs font-medium">Añadir Foto</span>
-          </div>
-        </div>
-
         <form onSubmit={handleSave} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nombre o Apodo</label>
-              <input 
-                type="text" 
+              <label htmlFor="plant-name" className="text-sm font-medium text-slate-700 dark:text-slate-300">Nombre o Apodo</label>
+              <input
+                id="plant-name"
+                type="text"
                 placeholder="Ej. Sr. Helecho"
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition-all"
+                className={`${BASE_CONTROL_CLASS} ${borderClass("name")} text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500`}
                 value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
+                onChange={e => handleChange("name", e.target.value)}
                 required
+                {...errorProps("name")}
               />
+              {renderFieldError("name")}
             </div>
-            
+
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Especie de Planta</label>
-              <select 
-                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 text-slate-800 dark:text-slate-100 transition-all"
+              <label htmlFor="plant-species" className="text-sm font-medium text-slate-700 dark:text-slate-300">Especie de Planta</label>
+              <select
+                id="plant-species"
+                className={`${BASE_CONTROL_CLASS} ${borderClass("species")} text-slate-800 dark:text-slate-100`}
                 value={formData.species}
-                onChange={e => setFormData({...formData, species: e.target.value})}
+                onChange={e => handleChange("species", e.target.value)}
+                required
+                {...errorProps("species")}
               >
-                <option value="Detección Automática">Detección Automática</option>
-                {PREDEFINED_SPECIES.map((species, index) => (
-                  <option key={index} value={species}>{species}</option>
+                <option value="">Selecciona una especie</option>
+                {SPECIES_OPTIONS.map((species) => (
+                  <option key={species} value={species}>{species}</option>
                 ))}
               </select>
+              {renderFieldError("species")}
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Ubicación en Casa</label>
-            <select 
-              className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 text-slate-700 dark:text-slate-200 transition-all"
+            <label htmlFor="plant-location" className="text-sm font-medium text-slate-700 dark:text-slate-300">Ubicación en Casa</label>
+            <select
+              id="plant-location"
+              className={`${BASE_CONTROL_CLASS} ${borderClass("location")} text-slate-700 dark:text-slate-200`}
               value={formData.location}
-              onChange={e => setFormData({...formData, location: e.target.value})}
+              onChange={e => handleChange("location", e.target.value)}
+              {...errorProps("location")}
             >
               <option value="sala">Sala de Estar</option>
               <option value="dormitorio">Dormitorio</option>
@@ -108,40 +177,22 @@ export function AddPlant() {
               <option value="oficina">Oficina / Estudio</option>
               <option value="exterior">Balcón / Exterior</option>
             </select>
+            {renderFieldError("location")}
           </div>
 
-          <div className="pt-4 border-t border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="bg-blue-100 dark:bg-blue-900/30 p-2 rounded-lg">
-                <Cpu className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+          <div className="pt-6 space-y-4">
+            {generalError && (
+              <div role="alert" className="px-4 py-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                {generalError}
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-800 dark:text-slate-100">Vincular Sensor</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Conecta tu hardware PlantPulse (Opcional)</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row gap-3">
-              <input 
-                type="text" 
-                placeholder="ID del Dispositivo (ej. PP-8X2F)"
-                className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 dark:focus:border-emerald-500 text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 transition-all uppercase font-mono text-sm"
-                value={formData.sensorId}
-                onChange={e => setFormData({...formData, sensorId: e.target.value})}
-              />
-              <button type="button" className="px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 border border-transparent dark:border-slate-700 transition-colors">
-                Buscar
-              </button>
-            </div>
-          </div>
-
-          <div className="pt-6">
-            <button 
-              type="submit" 
-              className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-sm shadow-emerald-200 dark:shadow-none transition-all"
+            )}
+            <button
+              type="submit"
+              disabled={submitting}
+              className="w-full flex items-center justify-center gap-2 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-sm shadow-emerald-200 dark:shadow-none transition-all disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Save size={20} />
-              Guardar Planta
+              {submitting ? "Guardando..." : "Guardar Planta"}
             </button>
           </div>
         </form>

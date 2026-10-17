@@ -1,4 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import type { PlantResponse } from "../api/types";
+
+// Imagen local que se muestra cuando la planta no tiene foto (imageUrl null)
+export const DEFAULT_PLANT_IMAGE = "/plant-placeholder.svg";
 
 export type Plant = {
   id: string;
@@ -14,7 +18,6 @@ export type Plant = {
   };
   lastWatered: string;
   location?: string;
-  sensorId?: string;
 };
 
 const INITIAL_PLANTS: Plant[] = [
@@ -50,9 +53,31 @@ const INITIAL_PLANTS: Plant[] = [
   }
 ];
 
+// Convierte la planta que devuelve la API al tipo Plant que usa la interfaz
+export function plantFromApi(plant: PlantResponse): Plant {
+  return {
+    id: plant.id,
+    name: plant.name,
+    species: plant.species,
+    status: plant.status,
+    image: plant.imageUrl ?? DEFAULT_PLANT_IMAGE,
+    location: plant.location ?? undefined,
+    lastWatered: plant.lastWateredAt === null
+      ? "Sin registro"
+      : new Date(plant.lastWateredAt).toLocaleDateString("es-CO"),
+    // Provisional hasta PLAN-39: lecturas reales desde la API
+    sensors: {
+      moisture: Math.floor(Math.random() * 40) + 40, // 40-80
+      light: Math.floor(Math.random() * 50) + 30, // 30-80
+      temperature: Math.floor(Math.random() * 10) + 18, // 18-28
+      humidity: Math.floor(Math.random() * 40) + 30, // 30-70
+    },
+  };
+}
+
 type PlantContextType = {
   plants: Plant[];
-  addPlant: (plant: Omit<Plant, "id" | "status" | "sensors" | "lastWatered">) => void;
+  addPlantFromApi: (plant: PlantResponse) => void;
   updatePlant: (id: string, plant: Partial<Plant>) => void;
   deletePlant: (id: string) => void;
   varySensors: () => void;
@@ -63,20 +88,10 @@ const PlantContext = createContext<PlantContextType | undefined>(undefined);
 export function PlantProvider({ children }: { children: React.ReactNode }) {
   const [plants, setPlants] = useState<Plant[]>(INITIAL_PLANTS);
 
-  const addPlant = (plantData: Omit<Plant, "id" | "status" | "sensors" | "lastWatered">) => {
-    const newPlant: Plant = {
-      ...plantData,
-      id: Math.random().toString(36).substr(2, 9),
-      status: "healthy",
-      sensors: {
-        moisture: Math.floor(Math.random() * 40) + 40, // 40-80
-        light: Math.floor(Math.random() * 50) + 30, // 30-80
-        temperature: Math.floor(Math.random() * 10) + 18, // 18-28
-        humidity: Math.floor(Math.random() * 40) + 30, // 30-70
-      },
-      lastWatered: "Hoy",
-    };
-    setPlants((prev) => [...prev, newPlant]);
+  // Agrega al inicio la planta creada en la API (el backend ordena por CreatedAt DESC).
+  // Provisional: PLAN-39 cargará la lista completa desde GET /api/plants.
+  const addPlantFromApi = (plant: PlantResponse) => {
+    setPlants((prev) => [plantFromApi(plant), ...prev]);
   };
 
   const updatePlant = (id: string, updatedData: Partial<Plant>) => {
@@ -119,7 +134,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <PlantContext.Provider value={{ plants, addPlant, updatePlant, deletePlant, varySensors }}>
+    <PlantContext.Provider value={{ plants, addPlantFromApi, updatePlant, deletePlant, varySensors }}>
       {children}
     </PlantContext.Provider>
   );
