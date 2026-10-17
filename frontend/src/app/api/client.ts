@@ -1,5 +1,5 @@
 export class ApiError extends Error {
-  constructor(message: string, public status: number, public details?: any) {
+  constructor(message: string, public status: number, public errors?: Record<string, string>) {
     super(message);
     this.name = 'ApiError';
   }
@@ -7,21 +7,23 @@ export class ApiError extends Error {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setUnauthorizedHandler(fn: () => void) {
+  unauthorizedHandler = fn;
+}
+
 interface ApiFetchOptions extends RequestInit {
   timeout?: number;
 }
 
-export async function apiFetch<T = any>(
-  url: string,
-  options: ApiFetchOptions = {},
-  logoutCallback?: () => void
-): Promise<T> {
+export async function apiFetch<T = any>(url: string, options: ApiFetchOptions = {}): Promise<T> {
   const controller = new AbortController();
   const timeoutId = options.timeout
     ? setTimeout(() => controller.abort(), options.timeout)
     : null;
 
-  const isLoginRequest = url.includes('/login');
+  const isLoginRequest = url === '/api/auth/login';
   const fullUrl = `${API_BASE_URL}${url}`;
 
   // Bearer token desde localStorage
@@ -32,11 +34,11 @@ export async function apiFetch<T = any>(
       ...options,
       signal: controller.signal,
       headers: {
-        'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
         ...options.headers,
       },
-      credentials: 'include',
+      credentials: undefined,
     });
 
     if (timeoutId) clearTimeout(timeoutId);
@@ -61,13 +63,13 @@ export async function apiFetch<T = any>(
         data?.error ||
         (typeof data === 'string' ? data : `Error ${response.status}: ${response.statusText}`);
 
-      const error = new ApiError(errorMessage, response.status, data);
+      const error = new ApiError(errorMessage, response.status, data?.errors);
 
       // 401 fuera de login borra sesión
       if (response.status === 401 && !isLoginRequest) {
         localStorage.removeItem('plantpulse_token');
         localStorage.removeItem('plantpulse_user');
-        if (logoutCallback) logoutCallback();
+        if (unauthorizedHandler) unauthorizedHandler();
       }
 
       throw error;

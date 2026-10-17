@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
-import { apiFetch, ApiError } from "../api/client";
+import { apiFetch, ApiError, setUnauthorizedHandler } from "../api/client";
 import { LoginRequest, LoginResponse } from "../api/types";
 
 type User = {
@@ -24,22 +24,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      logout();
+    });
+  }, [logout]);
+
   // Inicializar estado desde localStorage al montar el componente
   useEffect(() => {
     const initializeAuth = () => {
       try {
         const storedToken = localStorage.getItem('plantpulse_token');
-        const storedUser = localStorage.getItem('plantpulse_user');
-        
-        if (storedToken && storedUser) {
-          setToken(storedToken);
-          setUser(JSON.parse(storedUser));
+        if (storedToken) {
+          const decoded = decodeToken(storedToken);
+          if (decoded && !isTokenExpired(storedToken)) {
+            const payload = JSON.parse(atob(storedToken.split('.')[1]));
+            setToken(storedToken);
+            setUser({ id: payload.id, email: '', name: '' });
+          } else {
+            localStorage.removeItem('plantpulse_token');
+          }
         }
       } catch (error) {
         console.error('Error al inicializar autenticación:', error);
-        // Limpiar datos corruptos
         localStorage.removeItem('plantpulse_token');
-        localStorage.removeItem('plantpulse_user');
       } finally {
         setIsLoading(false);
       }
@@ -80,17 +88,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string): Promise<void> => {
     try {
       const loginData: LoginRequest = { email, password };
-      const response = await apiFetch<LoginResponse>('/auth/login', {
+      const response = await apiFetch<LoginResponse>('/api/auth/login', {
         method: 'POST',
-        body: JSON.stringify(loginData),
+        body: loginData,
       });
       
-      // Guardar token y usuario en localStorage
       localStorage.setItem('plantpulse_token', response.token);
-      localStorage.setItem('plantpulse_user', JSON.stringify(response.user));
       
+      const payload = JSON.parse(atob(response.token.split('.')[1]));
       setToken(response.token);
-      setUser(response.user);
+      setUser({ id: payload.id, email: '', name: '' });
       
     } catch (error) {
       if (error instanceof ApiError) {
@@ -128,7 +135,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(interval);
   }, [token]);
 
-  const isAuthenticated = !!user && !!token && !isTokenExpired(token || '');
+  const isAuthenticated = !!token && !isTokenExpired(token || '');
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout, isAuthenticated }}>
