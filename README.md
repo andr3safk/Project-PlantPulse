@@ -34,7 +34,7 @@ Simulador de sensores → Backend (API REST) → Base de datos → Frontend
 
 | Componente | Tecnología |
 |---|---|
-| Frontend | React + Vite (el prototipo actual está en TypeScript con Tailwind CSS) |
+| Frontend | React + Vite con TypeScript y Tailwind CSS (decisión del PO, 17/10/2026) |
 | Backend | Node.js + Express (API REST) |
 | Base de datos | Microsoft SQL Server |
 | Sensores | Simulados por software (Node.js) |
@@ -90,6 +90,7 @@ Luego abrir en el navegador: http://localhost:5173
 |---|---|
 | `npm run dev` | Inicia el servidor de desarrollo |
 | `npm run build` | Genera la versión de producción en `dist/` |
+| `npm run typecheck` | Revisa los tipos de TypeScript sin generar archivos |
 | `npm run preview` | Sirve localmente la versión generada en `dist/` |
 | `npm test` | Ejecuta las pruebas en modo vigilancia |
 | `npm run test:run` | Ejecuta las pruebas una sola vez |
