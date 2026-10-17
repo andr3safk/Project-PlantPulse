@@ -1,11 +1,13 @@
 import { Link, NavLink, Outlet } from "react-router";
-import { Sprout, LayoutDashboard, PlusCircle, ActivitySquare, Settings as SettingsIcon, Bell, Search, Menu } from "lucide-react";
+import { Sprout, LayoutDashboard, PlusCircle, ActivitySquare, Settings as SettingsIcon, Bell, Search, Menu, LogOut } from "lucide-react";
 import { useState } from "react";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
+import { useAuth } from "./contexts/AuthContext";
 
 export function Layout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const { logout } = useAuth();
 
   return (
     <div className="flex h-screen w-full bg-green-50/50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300">
@@ -132,6 +134,13 @@ export function Layout() {
                 className="w-full h-full object-cover"
               />
             </div>
+            <button
+              onClick={logout}
+              className="p-2 text-slate-400 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-green-50 dark:hover:bg-slate-800 rounded-full transition-colors ml-2"
+              title="Cerrar sesión"
+            >
+              <LogOut className="w-5 h-5" />
+            </button>
           </div>
         </header>
 
