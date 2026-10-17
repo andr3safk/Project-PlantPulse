@@ -32,10 +32,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setUnauthorizedHandler(() => logout());
-  }, []);
-
-  useEffect(() => {
-    setUnauthorizedHandler(() => logout());
     const initializeAuth = () => {
       try {
         const storedToken = localStorage.getItem('plantpulse_token');
@@ -92,7 +88,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       localStorage.setItem('plantpulse_token', response.token);
       
-      const payload = JSON.parse(atob(response.token.split('.')[1]));
+      const payload = decodeToken(response.token);
+      if (!payload) throw new Error('Token inválido');
       setToken(response.token);
       setUser({ id: payload.id, email: '', name: '' });
       
