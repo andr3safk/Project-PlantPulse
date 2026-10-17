@@ -60,14 +60,16 @@ VALUES (
 );
 GO
 
--- 4. Tres plantas del usuario demo (estados variados; dos sin dispositivo)
+-- 4. Tres plantas del usuario demo (estados variados; dos sin dispositivo).
+--    Location usa los mismos codigos que el formulario del frontend
+--    (sala, dormitorio, cocina, bano, oficina, exterior).
 INSERT INTO Plants (Id, Name, Species, Status, Location, DeviceId, UserId)
 VALUES
-    ('33333333-3333-3333-3333-333333333333', 'Monstera', 'Monstera deliciosa', 'healthy', 'Sala',
+    ('33333333-3333-3333-3333-333333333333', 'Monstera', 'Monstera deliciosa', 'healthy', 'sala',
         '22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111'),
-    ('44444444-4444-4444-4444-444444444444', 'Potos', 'Epipremnum aureum', 'warning', 'Dormitorio',
+    ('44444444-4444-4444-4444-444444444444', 'Potos', 'Epipremnum aureum', 'warning', 'dormitorio',
         NULL, '11111111-1111-1111-1111-111111111111'),
-    ('55555555-5555-5555-5555-555555555555', 'Suculenta', 'Echeveria elegans', 'critical', 'Balcon',
+    ('55555555-5555-5555-5555-555555555555', 'Suculenta', 'Echeveria elegans', 'critical', 'exterior',
         NULL, '11111111-1111-1111-1111-111111111111');
 GO
 
