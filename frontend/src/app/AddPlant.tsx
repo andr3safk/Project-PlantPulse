@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { Save, ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "react-router";
+import { toast } from "sonner";
 import { usePlants } from "./contexts/PlantContext";
 import { createPlant } from "./api/plants";
 import { ApiError } from "./api/client";
@@ -9,6 +10,7 @@ import {
   CAMPOS_VISIBLES,
   esCampoVisible,
   mensajeErrorRegistro,
+  mensajeExitoRegistro,
   type CampoVisible,
 } from "./utils/mensajesRegistro";
 
@@ -87,6 +89,8 @@ export function AddPlant() {
         location: normalizarTexto(formData.location),
       });
       addPlantFromApi(plant);
+      // Se usa el nombre que guardó la API, no el del formulario
+      toast.success(mensajeExitoRegistro(plant.name));
       navigate("/");
       // Éxito: el componente se desmonta al navegar, no se actualiza más estado
     } catch (error) {
