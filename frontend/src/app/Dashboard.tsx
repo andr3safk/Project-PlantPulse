@@ -1,18 +1,46 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Droplets, Sun, Thermometer, Wind, AlertCircle, AlertTriangle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
 import { usePlants, Plant } from "./contexts/PlantContext";
-import { validarPlanta, normalizarTexto, type DatosPlanta, type ErroresPlanta } from "./utils/validarPlanta";
-import { MSG_ERROR_CARGA_LISTA, mensajeErrorCarga } from "./utils/mensajesEdicion";
-import { etiquetaUbicacion } from "./utils/opcionesPlanta";
+import { getPlant } from "./api/plants";
+import { ApiError } from "./api/client";
+import type { PlantResponse } from "./api/types";
+import { validarPlanta, normalizarTexto, NOMBRE_MAX, ESPECIE_MAX, type ErroresPlanta } from "./utils/validarPlanta";
+import { type CampoVisible } from "./utils/mensajesRegistro";
+import {
+  MSG_ERROR_CARGA_LISTA,
+  MSG_ERROR_CARGA_PLANTA,
+  mensajeErrorCarga,
+} from "./utils/mensajesEdicion";
+import { UBICACIONES, esUbicacionConocida, etiquetaUbicacion } from "./utils/opcionesPlanta";
+
+// Valores del formulario de edición. location "" = sin ubicación (el backend la guarda como NULL).
+type FormEdicion = { name: string; species: string; location: string };
+const FORM_VACIO: FormEdicion = { name: "", species: "", location: "" };
+// Orden de los campos: el foco va al primer campo con error
+const CAMPOS_EDICION: readonly CampoVisible[] = ["name", "species", "location"];
+
+const formDesdeApi = (p: PlantResponse): FormEdicion => ({
+  name: p.name,
+  species: p.species,
+  location: p.location ?? "",
+});
 
 export function Dashboard() {
   const { plants, estadoCarga, errorCarga, cargarPlantas, deletePlant, updatePlant } = usePlants();
-  // editingPlant guarda la planta original; editForm, los valores que el usuario está editando.
+
+  // --- Edición (PLAN-9) ---
+  // editingPlant: la tarjeta que se pulsó. original: los datos reales que devolvió GET /api/plants/:id.
   const [editingPlant, setEditingPlant] = useState<Plant | null>(null);
-  const [editForm, setEditForm] = useState<DatosPlanta>({ name: "", species: "" });
+  const [original, setOriginal] = useState<PlantResponse | null>(null);
+  const [editForm, setEditForm] = useState<FormEdicion>(FORM_VACIO);
   const [editErrors, setEditErrors] = useState<ErroresPlanta>({});
+  const [editGeneralError, setEditGeneralError] = useState<string | null>(null);
+  const [cargandoEdicion, setCargandoEdicion] = useState(false);
+  // Cada apertura del modal recibe un número: una respuesta de un modal anterior se ignora
+  const solicitudEdicion = useRef(0);
+
   const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
 
@@ -24,23 +52,57 @@ export function Dashboard() {
   const healthyCount = plants.filter(p => p.status === 'healthy').length;
   const attentionCount = plants.filter(p => p.status !== 'healthy').length;
 
-  const editHasChanges = editingPlant !== null && (
-    normalizarTexto(editForm.name) !== normalizarTexto(editingPlant.name) ||
-    normalizarTexto(editForm.species) !== normalizarTexto(editingPlant.species)
+  const editHasChanges = original !== null && (
+    normalizarTexto(editForm.name) !== normalizarTexto(original.name) ||
+    normalizarTexto(editForm.species) !== normalizarTexto(original.species) ||
+    normalizarTexto(editForm.location) !== normalizarTexto(original.location ?? "")
   );
 
-  const openEditModal = (plant: Plant) => {
-    setEditingPlant(plant);
-    setEditForm({ name: plant.name, species: plant.species });
+  // Ubicación guardada que no es uno de los códigos (dato antiguo): se agrega como opción
+  // para que el select la muestre tal cual y no la cambie sin que el usuario lo decida.
+  const ubicacionExtra =
+    original?.location && !esUbicacionConocida(original.location) ? original.location : null;
+
+  const resetEdicion = () => {
+    setEditingPlant(null);
+    setOriginal(null);
+    setEditForm(FORM_VACIO);
     setEditErrors({});
+    setEditGeneralError(null);
+    setCargandoEdicion(false);
+  };
+
+  // PLAN-23: al abrir el modal se piden los datos actuales de la planta a la API
+  const openEditModal = async (plant: Plant) => {
+    const id = ++solicitudEdicion.current;
+    resetEdicion();
+    setEditingPlant(plant);
+    setCargandoEdicion(true);
+    try {
+      const datos = await getPlant(plant.id);
+      if (id !== solicitudEdicion.current) return;
+      setOriginal(datos);
+      setEditForm(formDesdeApi(datos));
+      setCargandoEdicion(false);
+    } catch (error) {
+      if (id !== solicitudEdicion.current) return;
+      // 401: apiFetch ya cerró la sesión y redirige a /login
+      if (error instanceof ApiError && error.status === 401) {
+        closeEditModal();
+        return;
+      }
+      setCargandoEdicion(false);
+      setEditGeneralError(mensajeErrorCarga(error, MSG_ERROR_CARGA_PLANTA));
+    }
   };
 
   const closeEditModal = () => {
-    setEditingPlant(null);
-    setEditErrors({});
+    // Invalida cualquier respuesta pendiente de este modal
+    solicitudEdicion.current++;
+    resetEdicion();
   };
 
-  const handleEditChange = (field: keyof DatosPlanta, value: string) => {
+  const handleEditChange = (field: keyof FormEdicion, value: string) => {
     setEditForm(prev => ({ ...prev, [field]: value }));
     // El error del campo desaparece en cuanto el usuario lo corrige; se vuelve a validar al enviar.
     setEditErrors(prev => ({ ...prev, [field]: undefined }));
@@ -48,17 +110,22 @@ export function Dashboard() {
 
   const handleEditSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (!editingPlant) return;
+    if (!original) return;
 
     const errors = validarPlanta(editForm);
-    if (Object.keys(errors).length > 0) {
+    const primerError = CAMPOS_EDICION.find((campo) => errors[campo]);
+    if (primerError) {
       setEditErrors(errors);
+      setEditGeneralError(null);
+      document.getElementById(`edit-plant-${primerError}`)?.focus();
       return;
     }
 
-    updatePlant(editingPlant.id, {
+    // Provisional: todavía guarda en local; PLAN-24 lo cambia por PUT /api/plants/:id
+    updatePlant(original.id, {
       name: normalizarTexto(editForm.name),
       species: normalizarTexto(editForm.species),
+      location: normalizarTexto(editForm.location),
     });
     closeEditModal();
   };
@@ -69,6 +136,21 @@ export function Dashboard() {
       setPlantToDelete(null);
     }
   };
+
+  // Atributos de accesibilidad y borde de un control del modal de edición
+  const editControlProps = (field: CampoVisible) => ({
+    id: `edit-plant-${field}`,
+    "aria-invalid": editErrors[field] ? true : undefined,
+    "aria-describedby": editErrors[field] ? `edit-plant-${field}-error` : undefined,
+    className: `w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 outline-none text-slate-800 dark:text-slate-100 ${editErrors[field] ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 dark:border-slate-700 focus:ring-emerald-500/20 focus:border-emerald-500"}`,
+  });
+
+  const renderEditError = (field: CampoVisible) =>
+    editErrors[field] && (
+      <p id={`edit-plant-${field}-error`} role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
+        {editErrors[field]}
+      </p>
+    );
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 relative">
@@ -128,7 +210,7 @@ export function Dashboard() {
           <PlantCard 
             key={plant.id} 
             plant={plant} 
-            onEdit={() => openEditModal(plant)}
+            onEdit={() => void openEditModal(plant)}
             onDelete={() => setPlantToDelete(plant)}
             onViewDetails={() => setDetailsPlant(plant)}
           />
@@ -145,68 +227,99 @@ export function Dashboard() {
                 type="button"
                 onClick={closeEditModal}
                 aria-label="Cerrar"
-                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 rounded-full"
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 bg-slate-50 dark:bg-slate-800 rounded-full disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <X size={20} />
               </button>
             </div>
 
-            {/* noValidate: los mensajes los muestra validarPlanta, no el globo nativo del navegador */}
-            <form onSubmit={handleEditSubmit} noValidate className="space-y-4">
-              <div>
-                <label htmlFor="edit-plant-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre</label>
-                <input
-                  id="edit-plant-name"
-                  type="text"
-                  value={editForm.name}
-                  onChange={e => handleEditChange("name", e.target.value)}
-                  aria-invalid={editErrors.name ? true : undefined}
-                  aria-describedby={editErrors.name ? "edit-plant-name-error" : undefined}
-                  className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 outline-none text-slate-800 dark:text-slate-100 ${editErrors.name ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 dark:border-slate-700 focus:ring-emerald-500/20 focus:border-emerald-500"}`}
-                  required
-                />
-                {editErrors.name && (
-                  <p id="edit-plant-name-error" role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
-                    {editErrors.name}
-                  </p>
-                )}
-              </div>
-              <div>
-                <label htmlFor="edit-plant-species" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Especie</label>
-                <input
-                  id="edit-plant-species"
-                  type="text"
-                  value={editForm.species}
-                  onChange={e => handleEditChange("species", e.target.value)}
-                  aria-invalid={editErrors.species ? true : undefined}
-                  aria-describedby={editErrors.species ? "edit-plant-species-error" : undefined}
-                  className={`w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border rounded-xl focus:ring-2 outline-none text-slate-800 dark:text-slate-100 ${editErrors.species ? "border-red-500 focus:ring-red-500/20 focus:border-red-500" : "border-slate-200 dark:border-slate-700 focus:ring-emerald-500/20 focus:border-emerald-500"}`}
-                  required
-                />
-                {editErrors.species && (
-                  <p id="edit-plant-species-error" role="alert" className="mt-1 text-sm text-red-600 dark:text-red-400">
-                    {editErrors.species}
-                  </p>
-                )}
-              </div>
+            {cargandoEdicion && (
+              <p role="status" className="py-8 text-center text-slate-500 dark:text-slate-400">Cargando datos de la planta...</p>
+            )}
 
-              <div className="pt-4 flex gap-3">
+            {/* Error al cargar: sin datos reales no se muestra el formulario */}
+            {!cargandoEdicion && !original && editGeneralError && (
+              <div className="space-y-4">
+                <div role="alert" className="px-4 py-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                  {editGeneralError}
+                </div>
                 <button
                   type="button"
                   onClick={closeEditModal}
-                  className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                  className="w-full px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                 >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={!editHasChanges}
-                  className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
-                >
-                  Guardar
+                  Volver a mis plantas
                 </button>
               </div>
-            </form>
+            )}
+
+            {original && (
+              /* noValidate: los mensajes los muestra validarPlanta, no el globo nativo del navegador */
+              <form onSubmit={handleEditSubmit} noValidate className="space-y-4">
+                <div>
+                  <label htmlFor="edit-plant-name" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nombre</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={e => handleEditChange("name", e.target.value)}
+                    maxLength={NOMBRE_MAX}
+                    aria-required="true"
+                    {...editControlProps("name")}
+                  />
+                  {renderEditError("name")}
+                </div>
+                <div>
+                  <label htmlFor="edit-plant-species" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Especie</label>
+                  <input
+                    type="text"
+                    value={editForm.species}
+                    onChange={e => handleEditChange("species", e.target.value)}
+                    maxLength={ESPECIE_MAX}
+                    aria-required="true"
+                    {...editControlProps("species")}
+                  />
+                  {renderEditError("species")}
+                </div>
+                <div>
+                  <label htmlFor="edit-plant-location" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Ubicación</label>
+                  <select
+                    value={editForm.location}
+                    onChange={e => handleEditChange("location", e.target.value)}
+                    {...editControlProps("location")}
+                  >
+                    <option value="">Sin ubicación</option>
+                    {ubicacionExtra && <option value={ubicacionExtra}>{ubicacionExtra}</option>}
+                    {UBICACIONES.map((u) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
+                  {renderEditError("location")}
+                </div>
+
+                {editGeneralError && (
+                  <div role="alert" className="px-4 py-3 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm">
+                    {editGeneralError}
+                  </div>
+                )}
+
+                <div className="pt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={!editHasChanges}
+                    className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-600"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
