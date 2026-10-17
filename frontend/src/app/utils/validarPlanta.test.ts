@@ -6,6 +6,7 @@ import {
   NOMBRE_MAX,
   ESPECIE_MIN,
   ESPECIE_MAX,
+  UBICACION_MAX,
   type DatosPlanta,
 } from "./validarPlanta";
 
@@ -107,6 +108,67 @@ describe("validarPlanta", () => {
       const valor = "a" + " ".repeat(11) + "a".repeat(max - 2);
       expect(valor.length).toBe(max + 10);
       expect(validar(valor)).toEqual({});
+    });
+  });
+
+  // Ubicación: opcional, máximo 50 y mismos caracteres que nombre y especie.
+  describe("location", () => {
+    const MENSAJE_MAXIMO = "La ubicación no puede superar los 50 caracteres.";
+    const MENSAJE_CARACTERES =
+      "La ubicación solo puede contener letras, números, espacios, guiones, puntos y paréntesis.";
+    const validar = (location: string | null) => validarPlanta({ ...DATOS_VALIDOS, location });
+
+    it("el límite es 50, igual que en el backend", () => {
+      expect(UBICACION_MAX).toBe(50);
+    });
+
+    it("no da error si no se envía la ubicación", () => {
+      expect(validarPlanta({ name: "Monstruo", species: "Monstera Deliciosa" })).toEqual({});
+    });
+
+    it("no da error con null", () => {
+      expect(validar(null)).toEqual({});
+    });
+
+    it("no da error con texto vacío ni con solo espacios", () => {
+      expect(validar("")).toEqual({});
+      expect(validar("     ")).toEqual({});
+    });
+
+    it("acepta exactamente 50 caracteres", () => {
+      expect(validar("a".repeat(UBICACION_MAX))).toEqual({});
+    });
+
+    it("rechaza 51 caracteres con el mensaje de máximo", () => {
+      expect(validar("a".repeat(UBICACION_MAX + 1))).toEqual({ location: MENSAJE_MAXIMO });
+    });
+
+    it("rechaza caracteres no permitidos con el mensaje de caracteres", () => {
+      expect(validar("Sala<script>")).toEqual({ location: MENSAJE_CARACTERES });
+      expect(validar("Sala@casa").location).toBe(MENSAJE_CARACTERES);
+    });
+
+    it.each(["sala", "dormitorio", "cocina", "bano", "oficina", "exterior"])(
+      "acepta el código del formulario %s",
+      (codigo) => {
+        expect(validar(codigo)).toEqual({});
+      }
+    );
+
+    it("no cuenta los espacios repetidos para la longitud", () => {
+      // Sin normalizar mide 60; normalizado mide exactamente 50.
+      const valor = "a" + " ".repeat(11) + "a".repeat(UBICACION_MAX - 2);
+      expect(valor.length).toBe(UBICACION_MAX + 10);
+      expect(validar(valor)).toEqual({});
+    });
+
+    it("se reporta junto con los errores de nombre y especie", () => {
+      const errores = validarPlanta({ name: "", species: "", location: "Sala<script>" });
+      expect(errores).toEqual({
+        name: "El nombre es un campo obligatorio.",
+        species: "La especie es un campo obligatorio.",
+        location: MENSAJE_CARACTERES,
+      });
     });
   });
 });

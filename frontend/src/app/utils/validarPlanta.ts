@@ -1,8 +1,11 @@
-// Límites provisionales: ajustarlos cuando esté definida la tabla de plantas en SQL Server.
+// Mismas reglas y mensajes que backend/src/utils/validarPlanta.js (PLAN-53).
+// El frontend valida para dar buena experiencia; el backend valida porque
+// cualquiera puede llamar a la API sin pasar por el formulario.
 export const NOMBRE_MIN = 2;
 export const NOMBRE_MAX = 50;
 export const ESPECIE_MIN = 2;
 export const ESPECIE_MAX = 100;
+export const UBICACION_MAX = 50;
 
 // Letras (con tildes, diéresis y ñ), números, espacios, guion, punto y paréntesis.
 const CARACTERES_PERMITIDOS = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .()-]+$/;
@@ -10,11 +13,14 @@ const CARACTERES_PERMITIDOS = /^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9 .()-]+$/;
 export interface DatosPlanta {
   name: string;
   species: string;
+  // Opcional: el modal de edición del Dashboard solo valida nombre y especie
+  location?: string | null;
 }
 
 export interface ErroresPlanta {
   name?: string;
   species?: string;
+  location?: string;
 }
 
 /**
@@ -53,7 +59,7 @@ function validarCampo(valor: string, etiqueta: string, min: number, max: number)
  * Valida los datos de una planta. Función pura: no modifica la entrada.
  * Devuelve un objeto con un mensaje por cada campo inválido; vacío si todo es válido.
  */
-export function validarPlanta({ name, species }: DatosPlanta): ErroresPlanta {
+export function validarPlanta({ name, species, location }: DatosPlanta): ErroresPlanta {
   const errores: ErroresPlanta = {};
 
   const errorNombre = validarCampo(normalizarTexto(name), "El nombre", NOMBRE_MIN, NOMBRE_MAX);
@@ -61,6 +67,16 @@ export function validarPlanta({ name, species }: DatosPlanta): ErroresPlanta {
 
   const errorEspecie = validarCampo(normalizarTexto(species), "La especie", ESPECIE_MIN, ESPECIE_MAX);
   if (errorEspecie) errores.species = errorEspecie;
+
+  // Ubicación opcional: no enviada, null o vacía es válida
+  if (location !== undefined && location !== null) {
+    const ubicacion = normalizarTexto(location);
+    if (ubicacion.length > UBICACION_MAX) {
+      errores.location = `La ubicación no puede superar los ${UBICACION_MAX} caracteres.`;
+    } else if (ubicacion.length > 0 && !CARACTERES_PERMITIDOS.test(ubicacion)) {
+      errores.location = "La ubicación solo puede contener letras, números, espacios, guiones, puntos y paréntesis.";
+    }
+  }
 
   return errores;
 }
