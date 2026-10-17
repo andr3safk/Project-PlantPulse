@@ -13,6 +13,7 @@ import {
   mensajeExitoRegistro,
   type CampoVisible,
 } from "./utils/mensajesRegistro";
+import { UBICACIONES } from "./utils/opcionesPlanta";
 
 const SPECIES_OPTIONS = [
   "Monstera Deliciosa",
@@ -194,12 +195,9 @@ export function AddPlant() {
               onChange={e => handleChange("location", e.target.value)}
               {...errorProps("location")}
             >
-              <option value="sala">Sala de Estar</option>
-              <option value="dormitorio">Dormitorio</option>
-              <option value="cocina">Cocina</option>
-              <option value="bano">Baño</option>
-              <option value="oficina">Oficina / Estudio</option>
-              <option value="exterior">Balcón / Exterior</option>
+              {UBICACIONES.map((u) => (
+                <option key={u.value} value={u.value}>{u.label}</option>
+              ))}
             </select>
             {renderFieldError("location")}
           </div>
