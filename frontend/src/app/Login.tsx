@@ -83,7 +83,7 @@ export default function Login() {
                   placeholder="tu@correo.com"
                   className="w-full rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3 pl-10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 />
-                <img src="/email-9-svgrepo-com.svg" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400/70" />
+                <img src="/email-9-svgrepo-com.svg" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 [filter:invert(60%)]" />
               </div>
             </div>
 
@@ -101,7 +101,7 @@ export default function Login() {
                   placeholder="••••••••"
                   className="w-full rounded-xl bg-slate-800/60 border border-slate-700 px-4 py-3 pl-10 text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 transition"
                 />
-                <img src="/password-lock-svgrepo-com.svg" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400/70" />
+                <img src="/password-lock-svgrepo-com.svg" alt="" className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 opacity-50 [filter:invert(60%)]" />
               </div>
             </div>
 
