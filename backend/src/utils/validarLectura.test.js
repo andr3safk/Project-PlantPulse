@@ -1,47 +1,75 @@
+// Pruebas de la validación de lecturas — PLAN-55 (no usa base de datos)
 import { describe, it, expect } from 'vitest';
-import { calcularEstadoPlanta } from './estadoPlanta';
+import { validarLectura } from './validarLectura.js';
 
-describe('validarLectura (pure)', () => {
-  const validar = (val: any) => {
-    const errors: Record<string, string> = {};
-    if (val.moisture === undefined) errors.moisture = 'required';
-    else if (typeof val.moisture !== 'number' || !Number.isFinite(val.moisture)) errors.moisture = 'must be finite number';
-    else if (val.moisture < 0 || val.moisture > 100) errors.moisture = 'out of range';
-    if (val.temperature === undefined) errors.temperature = 'required';
-    else if (typeof val.temperature !== 'number' || !Number.isFinite(val.temperature)) errors.temperature = 'must be finite number';
-    else if (val.temperature < -10 || val.temperature > 60) errors.temperature = 'out of range';
-    if (val.light === undefined) errors.light = 'required';
-    else if (typeof val.light !== 'number' || !Number.isFinite(val.light)) errors.light = 'must be finite number';
-    else if (val.light < 0 || val.light > 100) errors.light = 'out of range';
-    return Object.keys(errors).length ? { errors } : null;
-  };
+const VALIDA = { moisture: 50, temperature: 22, light: 60 };
 
-  it('válida con valores limpios', () => {
-    expect(validar({ moisture: 50, temperature: 22, light: 60 })).toBeNull();
+describe('validarLectura', () => {
+  it('lectura válida → null', () => {
+    expect(validarLectura(VALIDA)).toBeNull();
   });
 
-  it('rechaza string en moisture', () => {
-    const res = validar({ moisture: '50', temperature: 22, light: 60 });
-    expect(res?.errors?.moisture).toBeDefined();
+  it('acepta los extremos de cada rango', () => {
+    expect(validarLectura({ moisture: 0, temperature: -10, light: 0 })).toBeNull();
+    expect(validarLectura({ moisture: 100, temperature: 60, light: 100 })).toBeNull();
   });
 
-  it('rechaza NaN', () => {
-    expect(validar({ moisture: NaN, temperature: 22, light: 60 })?.errors?.moisture).toBeDefined();
+  it('ignora campos extra', () => {
+    expect(validarLectura({ ...VALIDA, extra: 1, plantId: 'x' })).toBeNull();
   });
 
-  it('rechaza Infinity', () => {
-    expect(validar({ moisture: Infinity, temperature: 22, light: 60 })?.errors?.moisture).toBeDefined();
+  it('devuelve el mensaje del contrato', () => {
+    expect(validarLectura({})).toMatchObject({ message: 'Datos de lectura invalidos' });
   });
 
-  it('rechaza fuera de rango por debajo', () => {
-    expect(validar({ moisture: -1, temperature: 22, light: 60 })?.errors?.moisture).toBeDefined();
+  it.each(['moisture', 'temperature', 'light'])('%s faltante → obligatorio', (campo) => {
+    const { [campo]: _omitido, ...resto } = VALIDA;
+    expect(validarLectura(resto)).toEqual({
+      message: 'Datos de lectura invalidos',
+      errors: { [campo]: 'obligatorio' },
+    });
   });
 
-  it('rechaza fuera de rango por encima', () => {
-    expect(validar({ moisture: 101, temperature: 22, light: 60 })?.errors?.moisture).toBeDefined();
+  it('null cuenta como faltante', () => {
+    expect(validarLectura({ ...VALIDA, light: null }).errors).toEqual({ light: 'obligatorio' });
   });
 
-  it('ignora campo extra', () => {
-    expect(validar({ moisture: 50, temperature: 22, light: 60, extra: 1 })).toBeNull();
+  it.each([
+    ['texto numérico', '50'],
+    ['NaN', NaN],
+    ['Infinity', Infinity],
+    ['booleano', true],
+    ['objeto', {}],
+  ])('rechaza %s', (_nombre, valor) => {
+    expect(validarLectura({ ...VALIDA, moisture: valor }).errors).toEqual({ moisture: 'debe ser número' });
+  });
+
+  it.each([
+    ['moisture', -0.01, 'fuera de rango (0 a 100)'],
+    ['moisture', 100.01, 'fuera de rango (0 a 100)'],
+    ['temperature', -10.01, 'fuera de rango (-10 a 60)'],
+    ['temperature', 60.01, 'fuera de rango (-10 a 60)'],
+    ['light', -1, 'fuera de rango (0 a 100)'],
+    ['light', 101, 'fuera de rango (0 a 100)'],
+  ])('%s = %s → %s', (campo, valor, mensaje) => {
+    expect(validarLectura({ ...VALIDA, [campo]: valor }).errors).toEqual({ [campo]: mensaje });
+  });
+
+  it('informa todos los campos con error a la vez', () => {
+    expect(Object.keys(validarLectura({ moisture: 'x', temperature: 99 }).errors).sort())
+      .toEqual(['light', 'moisture', 'temperature']);
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['un arreglo', [50, 22, 60]],
+    ['un número', 5],
+  ])('cuerpo %s → los tres campos obligatorios (sin lanzar error)', (_nombre, cuerpo) => {
+    expect(validarLectura(cuerpo).errors).toEqual({
+      moisture: 'obligatorio',
+      temperature: 'obligatorio',
+      light: 'obligatorio',
+    });
   });
 });
