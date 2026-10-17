@@ -39,7 +39,7 @@ Puertos locales: frontend 5173, backend 3000, SQL Server 1433.
 
 **Fuera:** notificaciones automáticas, historial, gráficas avanzadas, app móvil, riego automático, IA, múltiples dispositivos. La mascota virtual se eliminó. `Diagnosis.tsx` (IA) y las notificaciones de `Settings.tsx` no se trabajan en el MVP.
 
-Hoy las plantas y lecturas son datos falsos en `frontend/src/app/contexts/PlantContext.tsx`; se reemplazarán por llamadas a la API.
+La lista de plantas se carga desde `GET /api/plants` en `frontend/src/app/contexts/PlantContext.tsx` (PLAN-9). Las lecturas de sensores del dashboard todavía son provisionales (valores aleatorios) hasta PLAN-39.
 
 ## Convenciones de Git
 
