@@ -1,0 +1,15 @@
+{
+  "name": "plantpulse-simulador",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.5"
+  }
+}

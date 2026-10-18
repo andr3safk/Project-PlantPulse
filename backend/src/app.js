@@ -5,6 +5,8 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import authRoutes from './routes/auth.js';
 import plantRoutes from './routes/plants.js';
+import deviceRoutes from './routes/devices.js';
+import readingRoutes from './routes/readings.js';
 
 dotenv.config();
 
@@ -17,6 +19,8 @@ app.use(express.json());
 // Rutas
 app.use('/api/auth', authRoutes);
 app.use('/api/plants', plantRoutes);
+app.use('/api/devices', deviceRoutes);
+app.use('/api/readings', readingRoutes);
 
 // Ruta de verificacion
 app.get('/api/health', (req, res) => {
