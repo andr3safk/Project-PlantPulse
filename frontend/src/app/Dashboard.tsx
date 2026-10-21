@@ -4,7 +4,7 @@ import { toast } from "sonner";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
 import { usePlants, Plant } from "./contexts/PlantContext";
-import { getPlant, updatePlant } from "./api/plants";
+import { deletePlant, getPlant, updatePlant } from "./api/plants";
 import { ApiError } from "./api/client";
 import type { PlantResponse, UpdatePlantRequest } from "./api/types";
 import { validarPlanta, normalizarTexto, NOMBRE_MAX, ESPECIE_MAX, type ErroresPlanta } from "./utils/validarPlanta";
@@ -16,6 +16,7 @@ import {
   mensajeErrorEdicion,
   mensajeExitoEdicion,
 } from "./utils/mensajesEdicion";
+import { MSG_PLANTA_YA_ELIMINADA, mensajeErrorEliminacion, mensajeExitoEliminacion } from "./utils/mensajesEliminacion";
 import { UBICACIONES, esUbicacionConocida, etiquetaUbicacion } from "./utils/opcionesPlanta";
 
 // Valores del formulario de edición. location "" = sin ubicación (el backend la guarda como NULL).
@@ -31,7 +32,7 @@ const formDesdeApi = (p: PlantResponse): FormEdicion => ({
 });
 
 export function Dashboard() {
-  const { plants, estadoCarga, errorCarga, cargarPlantas, deletePlant, replacePlantFromApi } = usePlants();
+  const { plants, estadoCarga, errorCarga, cargarPlantas, quitarPlanta, replacePlantFromApi } = usePlants();
 
   // --- Edición (PLAN-9) ---
   // editingPlant: la tarjeta que se pulsó. original: los datos reales que devolvió GET /api/plants/:id.
@@ -48,7 +49,13 @@ export function Dashboard() {
   const solicitudEdicion = useRef(0);
 
   const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
+
+  // --- Eliminación (PLAN-15: PLAN-28, PLAN-29) ---
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
+  const [eliminando, setEliminando] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  // El ref evita un doble envío antes de que React vuelva a renderizar el botón deshabilitado
+  const eliminandoRef = useRef(false);
 
   // La lista se pide a la API cada vez que se entra al Dashboard
   useEffect(() => {
@@ -170,10 +177,49 @@ export function Dashboard() {
     }
   };
 
-  const confirmDelete = () => {
-    if (plantToDelete) {
-      deletePlant(plantToDelete.id);
+  const openDeleteModal = (plant: Plant) => {
+    setDeleteError(null);
+    setPlantToDelete(plant);
+  };
+
+  // Mientras se espera la respuesta de la API el modal no se puede cerrar
+  const closeDeleteModal = () => {
+    if (eliminandoRef.current) return;
+    setPlantToDelete(null);
+    setDeleteError(null);
+  };
+
+  // La tarjeta solo se quita cuando la API confirma (204): la pantalla nunca muestra
+  // algo distinto de lo que hay en la base de datos
+  const confirmDelete = async () => {
+    if (!plantToDelete || eliminandoRef.current) return;
+    const { id, name } = plantToDelete;
+
+    eliminandoRef.current = true;
+    setEliminando(true);
+    setDeleteError(null);
+
+    try {
+      await deletePlant(id);
+      quitarPlanta(id);
+      toast.success(mensajeExitoEliminacion(name));
       setPlantToDelete(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        // apiFetch ya cerró la sesión y redirige a /login
+        setPlantToDelete(null);
+      } else if (error instanceof ApiError && error.status === 404) {
+        // Ya no existe (o no es del usuario): se quita de la lista para no mostrar una tarjeta fantasma
+        quitarPlanta(id);
+        toast.info(MSG_PLANTA_YA_ELIMINADA);
+        setPlantToDelete(null);
+      } else {
+        // La planta se conserva y el modal sigue abierto para reintentar o cancelar
+        setDeleteError(mensajeErrorEliminacion(error));
+      }
+    } finally {
+      eliminandoRef.current = false;
+      setEliminando(false);
     }
   };
 
@@ -251,7 +297,7 @@ export function Dashboard() {
             key={plant.id} 
             plant={plant} 
             onEdit={() => void openEditModal(plant)}
-            onDelete={() => setPlantToDelete(plant)}
+            onDelete={() => openDeleteModal(plant)}
             onViewDetails={() => setDetailsPlant(plant)}
           />
         ))}
@@ -369,26 +415,40 @@ export function Dashboard() {
       {/* Delete Confirmation Modal */}
       {plantToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-800 shadow-xl text-center">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-plant-title"
+            className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-sm p-6 border border-slate-200 dark:border-slate-800 shadow-xl text-center"
+          >
             <div className="w-16 h-16 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
               <Trash2 size={32} />
             </div>
-            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">¿Estás seguro?</h2>
+            <h2 id="delete-plant-title" className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-2">¿Estás seguro?</h2>
             <p className="text-slate-500 dark:text-slate-400 mb-6">
               ¿Deseas eliminar a <strong>{plantToDelete.name}</strong> de tus registros? Esta acción no se puede deshacer.
             </p>
+            {deleteError && (
+              <div role="alert" className="mb-4 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300 text-left">
+                {deleteError}
+              </div>
+            )}
             <div className="flex gap-3">
-              <button 
-                onClick={() => setPlantToDelete(null)}
-                className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                disabled={eliminando}
+                className="flex-1 px-4 py-3 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-xl font-medium hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 Cancelar
               </button>
-              <button 
-                onClick={confirmDelete}
-                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium shadow-sm transition-colors"
+              <button
+                type="button"
+                onClick={() => void confirmDelete()}
+                disabled={eliminando}
+                className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-medium shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                Eliminar
+                {eliminando ? "Eliminando..." : "Eliminar"}
               </button>
             </div>
           </div>

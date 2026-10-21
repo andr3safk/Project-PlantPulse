@@ -59,7 +59,7 @@ type PlantContextType = {
   cargarPlantas: () => Promise<void>;
   addPlantFromApi: (plant: PlantResponse) => void;
   replacePlantFromApi: (plant: PlantResponse) => void;
-  deletePlant: (id: string) => void;
+  quitarPlanta: (id: string) => void;
   varySensors: () => void;
 };
 
@@ -108,8 +108,9 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
     setPlants((prev) => prev.map((p) => (p.id === plant.id ? plantFromApi(plant, p.sensors) : p)));
   };
 
-  // Provisional hasta PLAN-15 (PLAN-28): solo quita la planta de la pantalla, no llama a la API
-  const deletePlant = (id: string) => {
+  // Quita una planta de la lista en pantalla. No llama a la API: el Dashboard la usa
+  // después de que DELETE /api/plants/:id responde 204 (o 404, si ya no existía) (PLAN-28, PLAN-29)
+  const quitarPlanta = (id: string) => {
     setPlants((prev) => prev.filter((p) => p.id !== id));
   };
 
@@ -145,7 +146,7 @@ export function PlantProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <PlantContext.Provider
-      value={{ plants, estadoCarga, errorCarga, cargarPlantas, addPlantFromApi, replacePlantFromApi, deletePlant, varySensors }}
+      value={{ plants, estadoCarga, errorCarga, cargarPlantas, addPlantFromApi, replacePlantFromApi, quitarPlanta, varySensors }}
     >
       {children}
     </PlantContext.Provider>
