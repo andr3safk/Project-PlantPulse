@@ -23,6 +23,31 @@ export interface PlantResponse {
   updatedAt: string;
 }
 
+// Última lectura de una planta en GET /api/plants (PLAN-39). null si la planta no tiene lecturas.
+// isStale: true si tiene más de 5 minutos (lo calcula el backend con la hora de SQL Server).
+export interface LastReadingResponse {
+  moisture: number | null;
+  temperature: number | null;
+  light: number | null;
+  recordedAt: string;
+  isStale: boolean;
+}
+
+// Dispositivo de una planta en GET /api/plants (PLAN-39). null si la planta no tiene dispositivo.
+// connected: true si su último latido tiene menos de 60 s (lo calcula el backend).
+export interface PlantDeviceResponse {
+  id: string;
+  lastSeenAt: string | null;
+  connected: boolean;
+}
+
+// Planta tal como la devuelve la LISTA (GET /api/plants): el objeto planta + lectura y dispositivo.
+// GET /api/plants/:id, POST y PUT devuelven solo PlantResponse.
+export interface PlantListItemResponse extends PlantResponse {
+  lastReading: LastReadingResponse | null;
+  device: PlantDeviceResponse | null;
+}
+
 // Campos que acepta el backend al crear una planta (lista blanca)
 export interface CreatePlantRequest {
   name: string;
