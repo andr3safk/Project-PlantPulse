@@ -21,6 +21,9 @@ export const deviceAuth = async (req, res, next) => {
     req.device = { id: result.recordset[0].Id.toLowerCase(), deviceKey: result.recordset[0].DeviceKey };
     next();
   } catch (err) {
+    if (err.code === 'EPARAM' || (err.message && err.message.includes('Invalid GUID'))) {
+      return res.status(401).json({ message: 'Dispositivo no autorizado' });
+    }
     console.error('Error en deviceAuth:', err);
     return res.status(500).json({ message: 'Error interno del servidor' });
   }
