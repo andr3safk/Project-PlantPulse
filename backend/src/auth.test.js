@@ -2,6 +2,7 @@
 // Las del middleware authenticateToken están en middleware/auth.test.js (sin BD, PLAN-58).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { pool } from './db.js';
 import app from './app.js';
 
@@ -20,6 +21,8 @@ describe('Login (PLAN-54)', () => {
     const res = await request(app).post('/api/auth/login').send(VALID);
     expect(res.status).toBe(200);
     expect(res.body.token).toBeDefined();
+    const decoded = jwt.verify(res.body.token, process.env.JWT_SECRET || 'test');
+    expect(decoded.id).toBe('11111111-1111-1111-1111-111111111111');
   });
 
   it('b) contraseña incorrecta -> 401 y mensaje generico', async () => {
