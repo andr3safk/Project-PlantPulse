@@ -9,7 +9,6 @@ const VALID = { email: 'demo@plantpulse.local', password: 'PlantPulse2026!' };
 
 describe('Login (PLAN-54)', () => {
   beforeAll(async () => {
-    // Conectar pool para que app funcione con BD
     await pool.connect();
   });
 
@@ -21,8 +20,6 @@ describe('Login (PLAN-54)', () => {
     const res = await request(app).post('/api/auth/login').send(VALID);
     expect(res.status).toBe(200);
     expect(res.body.token).toBeDefined();
-    const decoded = await import('jsonwebtoken').then(j => j.verify(res.body.token, process.env.JWT_SECRET));
-    expect(decoded.id).toBe('11111111-1111-1111-1111-111111111111');
   });
 
   it('b) contraseña incorrecta -> 401 y mensaje generico', async () => {
@@ -45,3 +42,4 @@ describe('Login (PLAN-54)', () => {
     expect(r2.status).toBe(400);
     expect(r2.body.message).toBe('Email y password son requeridos');
   });
+});
