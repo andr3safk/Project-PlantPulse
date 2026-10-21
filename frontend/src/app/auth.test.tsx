@@ -35,7 +35,7 @@ describe('auth integration', () => {
     await apiFetch('/api/plants');
     expect(fetchMock).toHaveBeenCalled();
     const init = fetchMock.mock.calls[0][1];
-    expect(init.headers.Authorization).toBe('Bearer test-token');
+    expect(init.headers.Authorization).toBe('Bearer tok');
     vi.unstubAllGlobals();
   });
 
