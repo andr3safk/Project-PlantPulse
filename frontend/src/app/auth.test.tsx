@@ -65,6 +65,16 @@ const renderApp = (rutaInicial: string) => {
 
 const fetchMock = vi.fn();
 
+Object.defineProperty(window, 'localStorage', {
+  value: {
+    getItem: vi.fn(),
+    setItem: vi.fn(),
+    removeItem: vi.fn(),
+    clear: vi.fn(),
+  },
+  writable: true,
+});
+
 beforeEach(() => {
   localStorage.clear();
   fetchMock.mockReset();
@@ -233,7 +243,7 @@ describe('ProtectedRoute y rutas', () => {
     localStorage.setItem('plantpulse_token', TOKEN_VALIDO());
     const router = renderApp('/');
 
-    await user.click(await screen.findByTitle('Cerrar sesión'));
+    await user.click(await screen.findByText(/Cerrar/i));
     await waitFor(() => expect(router.state.location.pathname).toBe('/login'));
     expect(localStorage.getItem('plantpulse_token')).toBeNull();
   });
