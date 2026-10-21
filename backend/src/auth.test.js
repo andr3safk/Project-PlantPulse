@@ -7,7 +7,7 @@ import app from './app.js';
 
 const VALID = { email: 'demo@plantpulse.local', password: 'PlantPulse2026!' };
 
-describe('Login y middleware (PLAN-54)', () => {
+describe('Login (PLAN-54)', () => {
   beforeAll(async () => {
     // Conectar pool para que app funcione con BD
     await pool.connect();

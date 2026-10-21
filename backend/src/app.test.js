@@ -27,4 +27,24 @@ describe('Manejo global de errores (PLAN-54)', () => {
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
   });
+
+  it('charset no soportado → 415 en formato JSON', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json; charset=latin1')
+      .send('{"email": "a@b.com"}');
+    expect(res.status).toBe(415);
+    expect(res.headers['content-type']).toMatch(/application\/json/);
+    expect(res.body).toEqual({ message: 'El formato del cuerpo de la petición no es compatible' });
+  });
+
+  it('Content-Encoding no soportado → 415 en formato JSON', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .set('Content-Encoding', 'desconocido')
+      .send('{"email": "a@b.com"}');
+    expect(res.status).toBe(415);
+    expect(res.body).toEqual({ message: 'El formato del cuerpo de la petición no es compatible' });
+  });
 });
