@@ -51,6 +51,17 @@ app.use((err, req, res, next) => {
     return res.status(413).json({ message: 'El cuerpo de la petición es demasiado grande' });
   }
 
+  // Otros errores del cliente detectados por express.json() (body-parser):
+  // charset o Content-Encoding no soportados (415), cuerpo incompleto o
+  // abortado (400), etc. body-parser marca con expose = true los errores cuyo
+  // detalle se puede mostrar; se responde con su status 4xx y un mensaje propio.
+  if (err.expose === true && Number.isInteger(err.status) && err.status >= 400 && err.status < 500) {
+    const mensaje = err.status === 415
+      ? 'El formato del cuerpo de la petición no es compatible'
+      : 'La petición no es válida';
+    return res.status(err.status).json({ message: mensaje });
+  }
+
   // Cualquier otro error es inesperado: se registra en la consola del servidor
   // para depurar, pero al cliente solo se le envia un mensaje generico para no
   // filtrar detalles internos (stack trace, consultas SQL, rutas de archivos).
