@@ -1,10 +1,9 @@
-// Pruebas reales del login y middleware — PLAN-54 (entregable 6)
+// Pruebas reales del login — PLAN-54 (entregable 6). Requieren SQL Server.
+// Las del middleware authenticateToken están en middleware/auth.test.js (sin BD, PLAN-58).
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
-import express from 'express';
 import { pool } from './db.js';
 import app from './app.js';
-import { authenticateToken } from './middleware/auth.js';
 
 const VALID = { email: 'demo@plantpulse.local', password: 'PlantPulse2026!' };
 
