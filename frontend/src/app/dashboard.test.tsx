@@ -1,4 +1,5 @@
 // Pruebas del Dashboard: lista desde la API y edición de plantas — PLAN-9 (PLAN-23, 24, 25, 26)
+// y eliminación de plantas — PLAN-15 (PLAN-28, 29, 30)
 // - El servicio ./api/plants está simulado: no se necesita el backend.
 // - PlantProvider y Dashboard son los reales.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -10,7 +11,7 @@ import { Dashboard } from './Dashboard';
 import { PlantProvider } from './contexts/PlantContext';
 import { Toaster } from './components/ui/sonner';
 import { ApiError } from './api/client';
-import { listPlants, getPlant, updatePlant } from './api/plants';
+import { listPlants, getPlant, updatePlant, deletePlant } from './api/plants';
 import type { PlantResponse } from './api/types';
 import { MSG_GENERICO, MSG_REVISA_CAMPOS, MSG_SIN_CONEXION, MSG_TIMEOUT } from './utils/mensajesRegistro';
 import {
@@ -19,16 +20,19 @@ import {
   MSG_PLANTA_NO_ENCONTRADA,
   mensajeExitoEdicion,
 } from './utils/mensajesEdicion';
+import { MSG_ERROR_ELIMINAR, MSG_PLANTA_YA_ELIMINADA, mensajeExitoEliminacion } from './utils/mensajesEliminacion';
 
 vi.mock('./api/plants', () => ({
   listPlants: vi.fn(),
   getPlant: vi.fn(),
   updatePlant: vi.fn(),
   createPlant: vi.fn(),
+  deletePlant: vi.fn(),
 }));
 const listPlantsMock = vi.mocked(listPlants);
 const getPlantMock = vi.mocked(getPlant);
 const updatePlantMock = vi.mocked(updatePlant);
+const deletePlantMock = vi.mocked(deletePlant);
 
 // --- Datos de prueba --------------------------------------------------------
 
@@ -93,6 +97,18 @@ const selectUbicacion = () => screen.getByLabelText('Ubicación');
 const botonGuardar = () => screen.getByRole('button', { name: /^(guardar|guardando\.\.\.)$/i });
 const modalAbierto = () => screen.queryByRole('heading', { name: 'Editar Planta' });
 
+// Eliminación: el botón "Eliminar" existe en cada tarjeta y en el modal, por eso se busca dentro del diálogo
+const botonesEliminarTarjeta = () => screen.getAllByRole('button', { name: 'Eliminar' });
+const modalEliminar = () => screen.queryByRole('dialog', { name: '¿Estás seguro?' });
+const confirmarEliminar = () =>
+  within(screen.getByRole('dialog', { name: '¿Estás seguro?' })).getByRole('button', { name: /^(eliminar|eliminando\.\.\.)$/i });
+const cancelarEliminar = () =>
+  within(screen.getByRole('dialog', { name: '¿Estás seguro?' })).getByRole('button', { name: 'Cancelar' });
+const abrirEliminar = async (user: ReturnType<typeof userEvent.setup>, indice = 0) => {
+  await user.click(botonesEliminarTarjeta()[indice]);
+  expect(modalEliminar()).toBeInTheDocument();
+};
+
 // Abre el modal de la planta en la posición indicada (0 = Monstruo, 1 = Serpientina, 2 = Suculenta)
 // y espera a que se precargue el formulario
 const abrirEditar = async (user: ReturnType<typeof userEvent.setup>, indice = 0) => {
@@ -104,6 +120,7 @@ beforeEach(() => {
   listPlantsMock.mockReset();
   getPlantMock.mockReset();
   updatePlantMock.mockReset();
+  deletePlantMock.mockReset();
   listPlantsMock.mockResolvedValue(PLANTAS);
   getPlantMock.mockImplementation(async (id: string) => {
     const encontrada = PLANTAS.find((p) => p.id === id);
@@ -669,5 +686,203 @@ describe('Editar planta: guardar con PUT (PLAN-24)', () => {
     await waitFor(() => expect(modalAbierto()).not.toBeInTheDocument());
     expect(updatePlantMock).toHaveBeenCalledTimes(2);
     expect(screen.getByRole('heading', { level: 3, name: 'Monstruo II' })).toBeInTheDocument();
+  });
+});
+
+// --- Eliminación (PLAN-15) ----------------------------------------------------
+
+describe('Eliminar planta: confirmación y llamada a la API (PLAN-28, PLAN-29)', () => {
+  it('pulsar Eliminar abre la confirmación con el nombre de la planta y no llama a la API', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 1);
+
+    expect(within(modalEliminar()!).getByText('Serpientina')).toBeInTheDocument();
+    expect(deletePlantMock).not.toHaveBeenCalled();
+  });
+
+  it('Cancelar cierra la confirmación, no llama a la API y conserva la planta (criterio 2)', async () => {
+    const user = userEvent.setup();
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(cancelarEliminar());
+
+    expect(modalEliminar()).not.toBeInTheDocument();
+    expect(deletePlantMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+  });
+
+  it('confirmar llama a DELETE con el id, quita la tarjeta sin recargar, cierra el modal y avisa (criterio 1)', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockResolvedValueOnce(undefined);
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 1);
+    await user.click(confirmarEliminar());
+
+    await waitFor(() => expect(modalEliminar()).not.toBeInTheDocument());
+    expect(deletePlantMock).toHaveBeenCalledTimes(1);
+    expect(deletePlantMock).toHaveBeenCalledWith(ID_SERPIENTINA);
+    expect(screen.queryByRole('heading', { level: 3, name: 'Serpientina' })).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Suculenta' })).toBeInTheDocument();
+    expect(await screen.findByText(mensajeExitoEliminacion('Serpientina'))).toBeInTheDocument();
+    // PLAN-29: la lista se actualiza en pantalla, no se vuelve a pedir a la API
+    expect(listPlantsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('el contador "Total Plantas" baja al eliminar', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockResolvedValueOnce(undefined);
+    renderDashboard();
+    await esperarLista();
+
+    const tarjetaTotal = () => screen.getByText('Total Plantas').parentElement!;
+    expect(tarjetaTotal()).toHaveTextContent('3');
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+
+    await waitFor(() => expect(tarjetaTotal()).toHaveTextContent('2'));
+  });
+
+  it('mientras elimina: "Eliminando...", botones deshabilitados y no se envía dos veces', async () => {
+    const user = userEvent.setup();
+    const respuesta = diferida<void>();
+    deletePlantMock.mockReturnValueOnce(respuesta.promise);
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    const boton = confirmarEliminar();
+    // Dos clics seguidos sin esperar a React: el segundo no debe llamar a la API
+    fireEvent.click(boton);
+    fireEvent.click(boton);
+
+    expect(confirmarEliminar()).toHaveTextContent('Eliminando...');
+    expect(confirmarEliminar()).toBeDisabled();
+    expect(cancelarEliminar()).toBeDisabled();
+    expect(deletePlantMock).toHaveBeenCalledTimes(1);
+    // La tarjeta sigue mientras la API no confirme
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+
+    await act(async () => respuesta.resolve());
+    await waitFor(() => expect(modalEliminar()).not.toBeInTheDocument());
+    expect(screen.queryByRole('heading', { level: 3, name: 'Monstruo' })).not.toBeInTheDocument();
+  });
+});
+
+describe('Eliminar planta: errores (PLAN-28)', () => {
+  it('un 404 quita la tarjeta (ya no existía), cierra el modal y avisa sin decir "eliminada correctamente"', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('Planta no encontrada', 404));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 2);
+    await user.click(confirmarEliminar());
+
+    await waitFor(() => expect(modalEliminar()).not.toBeInTheDocument());
+    expect(screen.queryByRole('heading', { level: 3, name: 'Suculenta' })).not.toBeInTheDocument();
+    expect(await screen.findByText(MSG_PLANTA_YA_ELIMINADA)).toBeInTheDocument();
+    expect(screen.queryByText(/eliminada correctamente/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Planta no encontrada')).not.toBeInTheDocument();
+  });
+
+  it('un error de red deja el modal abierto con el mensaje de sin conexión y conserva la planta', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+
+    const alerta = await within(modalEliminar()!).findByRole('alert');
+    expect(alerta).toHaveTextContent(MSG_SIN_CONEXION);
+    expect(confirmarEliminar()).toHaveTextContent('Eliminar');
+    expect(confirmarEliminar()).toBeEnabled();
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+    expect(screen.queryByText(/eliminada correctamente/)).not.toBeInTheDocument();
+  });
+
+  it('un 408 muestra el mensaje de timeout', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('Tiempo de espera agotado', 408));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+
+    expect(await within(modalEliminar()!).findByRole('alert')).toHaveTextContent(MSG_TIMEOUT);
+  });
+
+  it('un 500 muestra el mensaje genérico de eliminación, nunca el texto del backend', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('Error interno del servidor', 500));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+
+    expect(await within(modalEliminar()!).findByRole('alert')).toHaveTextContent(MSG_ERROR_ELIMINAR);
+    expect(screen.queryByText('Error interno del servidor')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+  });
+
+  it('un 401 cierra el modal sin recuadro ni aviso y la tarjeta se queda (el cliente redirige a /login)', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('No autorizado', 401));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+
+    await waitFor(() => expect(modalEliminar()).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.queryByText(/eliminada correctamente/)).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Monstruo' })).toBeInTheDocument();
+  });
+
+  it('después de un error, reintentar con éxito elimina la planta', async () => {
+    const user = userEvent.setup();
+    deletePlantMock
+      .mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0))
+      .mockResolvedValueOnce(undefined);
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+    await within(modalEliminar()!).findByRole('alert');
+
+    await user.click(confirmarEliminar());
+
+    await waitFor(() => expect(modalEliminar()).not.toBeInTheDocument());
+    expect(deletePlantMock).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('heading', { level: 3, name: 'Monstruo' })).not.toBeInTheDocument();
+  });
+
+  it('al cancelar tras un error y volver a abrir, el mensaje de error ya no aparece', async () => {
+    const user = userEvent.setup();
+    deletePlantMock.mockRejectedValueOnce(new ApiError('Error de conexión con el servidor', 0));
+    renderDashboard();
+    await esperarLista();
+
+    await abrirEliminar(user, 0);
+    await user.click(confirmarEliminar());
+    await within(modalEliminar()!).findByRole('alert');
+    await user.click(cancelarEliminar());
+
+    await abrirEliminar(user, 0);
+    expect(within(modalEliminar()!).queryByRole('alert')).not.toBeInTheDocument();
   });
 });

@@ -26,3 +26,9 @@ export function createPlant(data: CreatePlantRequest): Promise<PlantResponse> {
 export function updatePlant(id: string, data: UpdatePlantRequest): Promise<PlantResponse> {
   return apiFetch<PlantResponse>(rutaPlanta(id), { method: 'PUT', body: JSON.stringify(data) });
 }
+
+// Elimina una planta del usuario (DELETE). La API responde 204 sin cuerpo: apiFetch devuelve undefined.
+// Lanza ApiError 404 si la planta no existe o es de otro usuario.
+export function deletePlant(id: string): Promise<void> {
+  return apiFetch<void>(rutaPlanta(id), { method: 'DELETE' });
+}

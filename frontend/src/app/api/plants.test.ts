@@ -1,7 +1,7 @@
-// Pruebas del servicio de plantas (listPlants, getPlant, updatePlant) — PLAN-9
+// Pruebas del servicio de plantas (listPlants, getPlant, updatePlant) — PLAN-9; deletePlant — PLAN-15 (PLAN-30)
 // Se prueba el servicio REAL con apiFetch real, simulando solo fetch (no se necesita el backend).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { listPlants, getPlant, updatePlant } from './plants';
+import { listPlants, getPlant, updatePlant, deletePlant } from './plants';
 import { ApiError } from './client';
 import type { PlantResponse } from './types';
 
@@ -120,5 +120,44 @@ describe('updatePlant', () => {
     expect(error).toBeInstanceOf(ApiError);
     expect(error.status).toBe(400);
     expect(error.errors).toEqual(errors);
+  });
+});
+
+describe('deletePlant', () => {
+  it('hace DELETE a /api/plants/:id con el token, sin body, y con 204 resuelve sin valor', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(204));
+
+    await expect(deletePlant(ID)).resolves.toBeUndefined();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(`${BASE_URL}/api/plants/${ID}`);
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+    expect(init.headers.Authorization).toBe('Bearer tok');
+  });
+
+  it('codifica el id para que no pueda cambiar la ruta', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(204));
+
+    await deletePlant('../users?x=1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe(`${BASE_URL}/api/plants/..%2Fusers%3Fx%3D1`);
+  });
+
+  it('con un 404 lanza ApiError con status 404', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(404, { message: 'Planta no encontrada' }));
+
+    const error = await deletePlant(ID).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(404);
+  });
+
+  it('con un 500 lanza ApiError con status 500', async () => {
+    fetchMock.mockResolvedValueOnce(respuesta(500, { message: 'Error interno del servidor' }));
+
+    const error = await deletePlant(ID).catch((e) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(500);
   });
 });
