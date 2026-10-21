@@ -1,8 +1,11 @@
-// Textos y formato del monitoreo en el dashboard — PLAN-39 (lecturas reales)
+// Textos y formato del monitoreo en el dashboard — PLAN-39 (lecturas reales) y PLAN-48 (refresco)
 // Decisiones de PO (21/10/2026):
 // - Solo se muestran las 3 variables que mide el sistema: humedad del suelo, temperatura y luz.
 // - Una planta sin dispositivo o sin lecturas muestra "—" en cada variable.
 // - "Conectado" y "sin datos en tiempo real" los calcula el backend (device.connected, lastReading.isStale).
+
+// Refresco automático (PLAN-48): igual al intervalo del simulador (una lectura cada 10 s)
+export const INTERVALO_REFRESCO_MS = 10_000;
 
 export const SIN_DATO = "—";
 
@@ -11,6 +14,8 @@ export const TEXTO_ESPERANDO_LECTURA = "Esperando la primera lectura";
 export const TEXTO_CONECTADO = "Dispositivo conectado";
 export const TEXTO_DESCONECTADO = "Dispositivo desconectado";
 export const TEXTO_SIN_TIEMPO_REAL = "Sin datos en tiempo real";
+export const MSG_ERROR_REFRESCO =
+  "No se pudo actualizar la información. Se muestran los últimos datos recibidos y se volverá a intentar en unos segundos.";
 
 // Valor de una variable con su unidad ("45,3%", "22,5°C"), con máximo un decimal.
 // Una variable sin dato (null) se muestra como "—".

@@ -18,7 +18,10 @@ import {
 } from "./utils/mensajesEdicion";
 import { MSG_PLANTA_YA_ELIMINADA, mensajeErrorEliminacion, mensajeExitoEliminacion } from "./utils/mensajesEliminacion";
 import { UBICACIONES, esUbicacionConocida, etiquetaUbicacion } from "./utils/opcionesPlanta";
+import { useRefrescoAutomatico } from "./hooks/useRefrescoAutomatico";
 import {
+  INTERVALO_REFRESCO_MS,
+  MSG_ERROR_REFRESCO,
   TEXTO_CONECTADO,
   TEXTO_DESCONECTADO,
   TEXTO_ESPERANDO_LECTURA,
@@ -42,7 +45,9 @@ const formDesdeApi = (p: PlantResponse): FormEdicion => ({
 });
 
 export function Dashboard() {
-  const { plants, estadoCarga, errorCarga, cargarPlantas, quitarPlanta, replacePlantFromApi } = usePlants();
+  const {
+    plants, estadoCarga, errorCarga, cargarPlantas, refrescarPlantas, errorRefresco, quitarPlanta, replacePlantFromApi,
+  } = usePlants();
 
   // --- Edición (PLAN-9) ---
   // editingPlant: la tarjeta que se pulsó. original: los datos reales que devolvió GET /api/plants/:id.
@@ -58,7 +63,10 @@ export function Dashboard() {
   // Cada apertura del modal recibe un número: una respuesta de un modal anterior se ignora
   const solicitudEdicion = useRef(0);
 
-  const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
+  // Se guarda el id, no una copia: así el modal muestra los datos que trae cada refresco (PLAN-48)
+  // y se cierra solo si la planta ya no está en la lista.
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const detailsPlant = detailsId === null ? null : plants.find(p => p.id === detailsId) ?? null;
 
   // --- Eliminación (PLAN-15: PLAN-28, PLAN-29) ---
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
@@ -71,6 +79,10 @@ export function Dashboard() {
   useEffect(() => {
     void cargarPlantas();
   }, [cargarPlantas]);
+
+  // PLAN-48: mientras el Dashboard está abierto, la lista se refresca sola cada 10 s
+  // (lecturas, estado del dispositivo y aviso de "sin datos en tiempo real")
+  useRefrescoAutomatico(() => void refrescarPlantas(), INTERVALO_REFRESCO_MS);
 
   const healthyCount = plants.filter(p => p.status === 'healthy').length;
   const attentionCount = plants.filter(p => p.status !== 'healthy').length;
@@ -289,6 +301,13 @@ export function Dashboard() {
         </div>
       )}
 
+      {/* PLAN-48: un refresco automático falló; la lista sigue con los últimos datos */}
+      {estadoCarga === "ready" && errorRefresco && (
+        <p role="status" className="px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm">
+          {MSG_ERROR_REFRESCO}
+        </p>
+      )}
+
       {estadoCarga === "loading" && plants.length === 0 && (
         <p role="status" className="text-center text-slate-500 dark:text-slate-400 py-12">Cargando tus plantas...</p>
       )}
@@ -310,7 +329,7 @@ export function Dashboard() {
             plant={plant} 
             onEdit={() => void openEditModal(plant)}
             onDelete={() => openDeleteModal(plant)}
-            onViewDetails={() => setDetailsPlant(plant)}
+            onViewDetails={() => setDetailsId(plant.id)}
           />
         ))}
       </div>
@@ -479,7 +498,7 @@ export function Dashboard() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"></div>
               <button 
-                onClick={() => setDetailsPlant(null)}
+                onClick={() => setDetailsId(null)}
                 className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full text-white transition-colors"
               >
                 <X size={20} />
