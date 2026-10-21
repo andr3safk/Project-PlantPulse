@@ -614,29 +614,32 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
 
       {/* Datos de los sensores (PLAN-39): última lectura real de la API, solo las 3 variables medidas */}
       <div className="p-5 flex-1 flex flex-col">
-        <EstadoMonitoreo plant={plant} />
-        <div className="grid grid-cols-3 gap-3 mt-4">
-          <SensorItem 
-            icon={<Droplets size={16} />} 
-            label="Humedad" 
-            value={formatearValor(plant.lectura?.moisture ?? null, "%")} 
-            color="blue"
-            isLow={plant.lectura?.moisture != null && plant.lectura.moisture < 30}
-          />
-          <SensorItem 
-            icon={<Sun size={16} />} 
-            label="Luz" 
-            value={formatearValor(plant.lectura?.light ?? null, "%")} 
-            color="amber"
-          />
-          <SensorItem 
-            icon={<Thermometer size={16} />} 
-            label="Temp." 
-            value={formatearValor(plant.lectura?.temperature ?? null, "°C")} 
-            color="rose"
-          />
+        {/* mb-4: separa "Última lectura" de la línea de "Último riego" cuando la tarjeta no tiene espacio libre */}
+        <div className="mb-4">
+          <EstadoMonitoreo plant={plant} />
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <SensorItem
+              icon={<Droplets size={16} />}
+              label="Humedad"
+              value={formatearValor(plant.lectura?.moisture ?? null, "%")}
+              color="blue"
+              isLow={plant.lectura?.moisture != null && plant.lectura.moisture < 30}
+            />
+            <SensorItem
+              icon={<Sun size={16} />}
+              label="Luz"
+              value={formatearValor(plant.lectura?.light ?? null, "%")}
+              color="amber"
+            />
+            <SensorItem
+              icon={<Thermometer size={16} />}
+              label="Temp."
+              value={formatearValor(plant.lectura?.temperature ?? null, "°C")}
+              color="rose"
+            />
+          </div>
+          <TextoLectura plant={plant} />
         </div>
-        <TextoLectura plant={plant} />
 
         <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
           <span className="text-slate-500 dark:text-slate-400">Último riego: {plant.lastWatered}</span>
