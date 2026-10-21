@@ -60,7 +60,7 @@ Project-PlantPulse/
 
 ## ⚙️ Requisitos
 
-- [Node.js](https://nodejs.org/) 22 LTS o superior (probado con v24)
+- [Node.js](https://nodejs.org/) 22 o 24 LTS. **Todavía no usar Node 25 o superior:** varias pruebas del frontend fallan (se corregirá en una tarea aparte).
 - npm (incluido con Node.js). **No usar yarn ni pnpm:** el proyecto se instala solo con npm.
 - Git
 
@@ -95,7 +95,38 @@ Luego abrir en el navegador: http://localhost:5173
 | `npm test` | Ejecuta las pruebas en modo vigilancia |
 | `npm run test:run` | Ejecuta las pruebas una sola vez |
 
-> El backend y el simulador están en construcción. Sus instrucciones se agregarán en sus carpetas.
+> Instrucciones del backend en [`backend/README.md`](backend/README.md), del simulador en [`simulador/README.md`](simulador/README.md) y del ESP32 en [`esp32/README.md`](esp32/README.md).
+
+---
+
+## 📡 Estado del dispositivo en el dashboard
+
+El dashboard se refresca solo cada 10 segundos. En la tarjeta de cada planta se ve:
+
+| Indicador | Cuándo aparece |
+|---|---|
+| **Dispositivo conectado** | El último aviso del dispositivo llegó hace **menos de 60 s** |
+| **Dispositivo desconectado** | La planta tiene dispositivo, pero no ha avisado en el último minuto |
+| **Sin sensor vinculado** | La planta no tiene dispositivo (por ejemplo, las creadas desde el formulario) |
+| **Sin datos en tiempo real** | La última lectura tiene **más de 5 minutos** |
+
+El **ESP32** y el **simulador** usan la misma clave de dispositivo (`plantpulse_001`, el dispositivo del seed vinculado a la Monstera), y los dos cuentan como aviso de vida:
+
+- El ESP32 envía un latido cada 20 s (`POST /api/devices/heartbeat`). **No envía lecturas.**
+- El simulador envía una lectura cada 10 s (`POST /api/readings`).
+
+| Simulador | ESP32 | Dashboard (Monstera) |
+|---|---|---|
+| Apagado | Apagado | Dispositivo desconectado · Sin datos en tiempo real |
+| **Apagado** | **Encendido** | **Dispositivo conectado · Sin datos en tiempo real** |
+| Encendido | Apagado o encendido | Dispositivo conectado · lecturas en tiempo real |
+
+### Orden para la demostración
+
+1. Con el **simulador apagado**, encender el ESP32: en menos de 20 s la Monstera pasa a **"Dispositivo conectado"** y sigue con **"Sin datos en tiempo real"**. Esto demuestra que el ESP32 está conectado (es la única combinación que solo puede producir el ESP32).
+2. Encender el simulador: empiezan las lecturas en tiempo real y el aviso desaparece.
+
+Con el simulador encendido, el dashboard no puede distinguir si el ESP32 está conectado o no (decisión de PO, 21/10/2026).
 
 ---
 
