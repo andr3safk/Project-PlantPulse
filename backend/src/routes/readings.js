@@ -19,6 +19,9 @@ router.post('/', deviceAuth, async (req, res) => {
 
   // Lista blanca: solo estos tres campos
   const { moisture, temperature, light } = req.body;
+  const rMoisture = Math.round(Number(moisture) * 100) / 100;
+  const rTemperature = Math.round(Number(temperature) * 100) / 100;
+  const rLight = Math.round(Number(light) * 100) / 100;
   const deviceId = req.device.id;
 
   const transaccion = new sql.Transaction(pool);
@@ -33,9 +36,9 @@ router.post('/', deviceAuth, async (req, res) => {
     const insercion = await new sql.Request(transaccion)
       .input('deviceId', sql.UniqueIdentifier, deviceId)
       .input('plantId', sql.UniqueIdentifier, plantId)
-      .input('moisture', sql.Decimal(5, 2), moisture)
-      .input('temperature', sql.Decimal(5, 2), temperature)
-      .input('light', sql.Decimal(5, 2), light)
+      .input('moisture', sql.Decimal(5, 2), rMoisture)
+      .input('temperature', sql.Decimal(5, 2), rTemperature)
+      .input('light', sql.Decimal(5, 2), rLight)
       .query(`
         INSERT INTO SensorReadings (DeviceId, PlantId, Moisture, Temperature, Light)
         OUTPUT INSERTED.Id AS id, INSERTED.Moisture AS moisture, INSERTED.Temperature AS temperature,
