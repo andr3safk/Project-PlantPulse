@@ -96,8 +96,9 @@ describe('GET /api/plants', () => {
     for (const planta of res.body) {
       expect(planta).not.toHaveProperty('userId');
       expect(planta).not.toHaveProperty('UserId');
+      // lastReading y device: solo en la lista (PLAN-39); se prueban en plantsEstado.test.js
       expect(Object.keys(planta).sort()).toEqual([
-        'createdAt', 'deviceId', 'id', 'imageUrl', 'lastWateredAt',
+        'createdAt', 'device', 'deviceId', 'id', 'imageUrl', 'lastReading', 'lastWateredAt',
         'location', 'name', 'species', 'status', 'updatedAt',
       ]);
     }

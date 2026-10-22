@@ -1,13 +1,14 @@
 // Servicio de plantas: llamadas a /api/plants usando el cliente común (token y errores)
 import { apiFetch } from './client';
-import type { CreatePlantRequest, PlantResponse, UpdatePlantRequest } from './types';
+import type { CreatePlantRequest, PlantListItemResponse, PlantResponse, UpdatePlantRequest } from './types';
 
 // El id se codifica para que nunca pueda cambiar la ruta (p. ej. un id con "/" o "?").
 const rutaPlanta = (id: string) => `/api/plants/${encodeURIComponent(id)}`;
 
 // Lista las plantas del usuario autenticado (el backend las ordena por CreatedAt DESC).
-export function listPlants(): Promise<PlantResponse[]> {
-  return apiFetch<PlantResponse[]>('/api/plants');
+// Cada planta trae su última lectura y el estado de su dispositivo (PLAN-39).
+export function listPlants(): Promise<PlantListItemResponse[]> {
+  return apiFetch<PlantListItemResponse[]>('/api/plants');
 }
 
 // Trae una planta del usuario. Lanza ApiError 404 si no existe o es de otro usuario.

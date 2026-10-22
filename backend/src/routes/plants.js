@@ -5,6 +5,12 @@ import sql from 'mssql';
 import { pool } from '../db.js';
 import { authenticateToken } from '../middleware/auth.js';
 import { validarPlanta, NOMBRE_MAX, ESPECIE_MAX, UBICACION_MAX, IMAGEN_URL_MAX } from '../utils/validarPlanta.js';
+import {
+  SEGUNDOS_DISPOSITIVO_CONECTADO,
+  SEGUNDOS_LECTURA_EN_TIEMPO_REAL,
+  mapLastReading,
+  mapDevice,
+} from '../utils/tiempoReal.js';
 
 const router = Router();
 
@@ -16,6 +22,35 @@ const COLUMNAS = 'Id, Name, Species, ImageUrl, Status, Location, LastWateredAt, 
 const COLUMNAS_INSERTED = COLUMNAS.split(', ').map((c) => `INSERTED.${c}`).join(', ');
 
 const NO_ENCONTRADA = { message: 'Planta no encontrada' };
+
+// Consulta de la lista (PLAN-39): cada planta con su última lectura y el estado de su dispositivo.
+// - OUTER APPLY + TOP (1): la lectura más reciente de la planta (usa IX_SensorReadings_PlantId_RecordedAt);
+//   si no tiene lecturas, las columnas Lectura* llegan en NULL.
+// - LEFT JOIN Devices: si la planta no tiene dispositivo, las columnas Dispositivo* llegan en NULL.
+// - "Desactualizada" y "conectado" se calculan con la hora de SQL Server (ver utils/tiempoReal.js).
+const COLUMNAS_LISTA = COLUMNAS.split(', ').map((c) => `p.${c}`).join(', ');
+const CONSULTA_LISTA = `
+  SELECT ${COLUMNAS_LISTA},
+    r.Moisture AS LecturaMoisture,
+    r.Temperature AS LecturaTemperature,
+    r.Light AS LecturaLight,
+    r.RecordedAt AS LecturaRecordedAt,
+    CASE WHEN r.RecordedAt < DATEADD(SECOND, -@segundosTiempoReal, SYSUTCDATETIME())
+      THEN 1 ELSE 0 END AS LecturaDesactualizada,
+    d.Id AS DispositivoId,
+    d.LastSeenAt AS DispositivoLastSeenAt,
+    CASE WHEN d.LastSeenAt > DATEADD(SECOND, -@segundosConectado, SYSUTCDATETIME())
+      THEN 1 ELSE 0 END AS DispositivoConectado
+  FROM Plants p
+  LEFT JOIN Devices d ON d.Id = p.DeviceId
+  OUTER APPLY (
+    SELECT TOP (1) sr.Moisture, sr.Temperature, sr.Light, sr.RecordedAt
+    FROM SensorReadings sr
+    WHERE sr.PlantId = p.Id
+    ORDER BY sr.RecordedAt DESC, sr.Id DESC
+  ) r
+  WHERE p.UserId = @userId
+  ORDER BY p.CreatedAt DESC, p.Name ASC`;
 
 // Convierte una fila de SQL Server (PascalCase) al JSON de la API (camelCase)
 export function mapPlant(fila) {
@@ -74,13 +109,19 @@ router.param('id', (req, res, next, id) => {
   next();
 });
 
-// GET /api/plants — plantas del usuario, de la más reciente a la más antigua
+// GET /api/plants — plantas del usuario, de la más reciente a la más antigua.
+// Cada planta trae además lastReading y device (PLAN-39); las demás rutas no los incluyen.
 router.get('/', async (req, res) => {
   try {
-    const result = await requestDelUsuario(req).query(
-      `SELECT ${COLUMNAS} FROM Plants WHERE UserId = @userId ORDER BY CreatedAt DESC, Name ASC`
-    );
-    res.json(result.recordset.map(mapPlant));
+    const result = await requestDelUsuario(req)
+      .input('segundosTiempoReal', sql.Int, SEGUNDOS_LECTURA_EN_TIEMPO_REAL)
+      .input('segundosConectado', sql.Int, SEGUNDOS_DISPOSITIVO_CONECTADO)
+      .query(CONSULTA_LISTA);
+    res.json(result.recordset.map((fila) => ({
+      ...mapPlant(fila),
+      lastReading: mapLastReading(fila),
+      device: mapDevice(fila),
+    })));
   } catch (err) {
     errorInterno(res, 'GET /api/plants', err);
   }

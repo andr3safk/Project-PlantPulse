@@ -73,6 +73,29 @@ Cada usuario solo ve y modifica **sus** plantas: el id del usuario sale del toke
 #### `GET /api/plants`
 
 - `200`: arreglo de plantas del usuario, de la más reciente a la más antigua (`createdAt` descendente). Arreglo vacío si no tiene plantas.
+- Cada planta de la lista trae, además del objeto planta, su **última lectura** y el **estado de su dispositivo** (PLAN-39). Solo esta ruta los incluye; `GET /:id`, `POST` y `PUT` devuelven el objeto planta sin ellos.
+
+```json
+{
+  "...": "campos del objeto planta",
+  "lastReading": {
+    "moisture": 45.25,
+    "temperature": 22.5,
+    "light": 60,
+    "recordedAt": "2026-10-21T22:30:00.000Z",
+    "isStale": false
+  },
+  "device": {
+    "id": "22222222-2222-2222-2222-222222222222",
+    "lastSeenAt": "2026-10-21T22:30:05.000Z",
+    "connected": true
+  }
+}
+```
+
+- `lastReading`: la lectura más reciente de la planta (`SensorReadings.PlantId`), o `null` si no tiene lecturas. `isStale` es `true` si tiene **más de 5 minutos**: el dashboard muestra que los datos no están en tiempo real.
+- `device`: el dispositivo de la planta (`Plants.DeviceId`), o `null` si no tiene. `connected` es `true` si su último latido (`lastSeenAt`) tiene **menos de 60 segundos**; `lastSeenAt` es `null` si nunca envió uno.
+- `isStale` y `connected` se calculan con la hora de SQL Server, no con la del navegador. Las reglas están en `src/utils/tiempoReal.js` (decisión de PO, 21/10/2026).
 
 #### `GET /api/plants/:id`
 

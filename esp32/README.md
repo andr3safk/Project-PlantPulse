@@ -22,3 +22,4 @@ Código básico para ESP32 físico: conecta a WiFi y envía POST /api/devices/he
 ## Verificación
 
 - Monitor serie: debe mostrar `200` tras conectar al backend.
+- Dashboard (con el **simulador apagado**): en menos de 20 s la Monstera muestra **"Dispositivo conectado"** y **"Sin datos en tiempo real"** (el ESP32 no envía lecturas). Si el simulador está encendido, el dashboard ya dice "conectado" por las lecturas y no se nota el ESP32. Ver la sección *Estado del dispositivo en el dashboard* del `README.md` principal.

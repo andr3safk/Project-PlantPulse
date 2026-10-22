@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Droplets, Sun, Thermometer, Wind, AlertCircle, AlertTriangle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
+import { Droplets, Sun, Thermometer, Wifi, WifiOff, Clock, AlertCircle, AlertTriangle, CheckCircle2, Trash2, Edit2, X } from "lucide-react";
 import { toast } from "sonner";
 import { ImageWithFallback } from "./components/figma/ImageWithFallback";
 import { Link } from "react-router";
@@ -18,6 +18,19 @@ import {
 } from "./utils/mensajesEdicion";
 import { MSG_PLANTA_YA_ELIMINADA, mensajeErrorEliminacion, mensajeExitoEliminacion } from "./utils/mensajesEliminacion";
 import { UBICACIONES, esUbicacionConocida, etiquetaUbicacion } from "./utils/opcionesPlanta";
+import { useRefrescoAutomatico } from "./hooks/useRefrescoAutomatico";
+import {
+  INTERVALO_REFRESCO_MS,
+  MSG_ERROR_REFRESCO,
+  TEXTO_CONECTADO,
+  TEXTO_DESCONECTADO,
+  TEXTO_ESPERANDO_LECTURA,
+  TEXTO_SIN_SENSOR,
+  TEXTO_SIN_TIEMPO_REAL,
+  contarDispositivos,
+  formatearValor,
+  textoUltimaLectura,
+} from "./utils/formatoMonitoreo";
 
 // Valores del formulario de edición. location "" = sin ubicación (el backend la guarda como NULL).
 type FormEdicion = { name: string; species: string; location: string };
@@ -32,7 +45,9 @@ const formDesdeApi = (p: PlantResponse): FormEdicion => ({
 });
 
 export function Dashboard() {
-  const { plants, estadoCarga, errorCarga, cargarPlantas, quitarPlanta, replacePlantFromApi } = usePlants();
+  const {
+    plants, estadoCarga, errorCarga, cargarPlantas, refrescarPlantas, errorRefresco, quitarPlanta, replacePlantFromApi,
+  } = usePlants();
 
   // --- Edición (PLAN-9) ---
   // editingPlant: la tarjeta que se pulsó. original: los datos reales que devolvió GET /api/plants/:id.
@@ -48,7 +63,10 @@ export function Dashboard() {
   // Cada apertura del modal recibe un número: una respuesta de un modal anterior se ignora
   const solicitudEdicion = useRef(0);
 
-  const [detailsPlant, setDetailsPlant] = useState<Plant | null>(null);
+  // Se guarda el id, no una copia: así el modal muestra los datos que trae cada refresco (PLAN-48)
+  // y se cierra solo si la planta ya no está en la lista.
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const detailsPlant = detailsId === null ? null : plants.find(p => p.id === detailsId) ?? null;
 
   // --- Eliminación (PLAN-15: PLAN-28, PLAN-29) ---
   const [plantToDelete, setPlantToDelete] = useState<Plant | null>(null);
@@ -62,8 +80,14 @@ export function Dashboard() {
     void cargarPlantas();
   }, [cargarPlantas]);
 
+  // PLAN-48: mientras el Dashboard está abierto, la lista se refresca sola cada 10 s
+  // (lecturas, estado del dispositivo y aviso de "sin datos en tiempo real")
+  useRefrescoAutomatico(() => void refrescarPlantas(), INTERVALO_REFRESCO_MS);
+
   const healthyCount = plants.filter(p => p.status === 'healthy').length;
   const attentionCount = plants.filter(p => p.status !== 'healthy').length;
+  // PLAN-39: dispositivos reales (antes era plantas × 4, un dato inventado)
+  const dispositivos = contarDispositivos(plants.map(p => p.dispositivo));
 
   const editHasChanges = original !== null && (
     normalizarTexto(editForm.name) !== normalizarTexto(original.name) ||
@@ -260,7 +284,7 @@ export function Dashboard() {
         <SummaryCard title="Total Plantas" value={plants.length.toString()} icon={<Droplets className="w-5 h-5 text-blue-500 dark:text-blue-400" />} bgColor="bg-blue-50 dark:bg-blue-900/20" />
         <SummaryCard title="Saludables" value={healthyCount.toString()} icon={<CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />} bgColor="bg-emerald-50 dark:bg-emerald-900/20" />
         <SummaryCard title="Atención Req." value={attentionCount.toString()} icon={<AlertCircle className="w-5 h-5 text-amber-500 dark:text-amber-400" />} bgColor="bg-amber-50 dark:bg-amber-900/20" />
-        <SummaryCard title="Sensores Activos" value={(plants.length * 4).toString()} icon={<Wind className="w-5 h-5 text-purple-500 dark:text-purple-400" />} bgColor="bg-purple-50 dark:bg-purple-900/20" />
+        <SummaryCard title="Dispositivos conectados" value={`${dispositivos.conectados} de ${dispositivos.total}`} icon={<Wifi className="w-5 h-5 text-purple-500 dark:text-purple-400" />} bgColor="bg-purple-50 dark:bg-purple-900/20" />
       </div>
 
       {/* Estado de la carga de la lista */}
@@ -275,6 +299,13 @@ export function Dashboard() {
             Reintentar
           </button>
         </div>
+      )}
+
+      {/* PLAN-48: un refresco automático falló; la lista sigue con los últimos datos */}
+      {estadoCarga === "ready" && errorRefresco && (
+        <p role="status" className="px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 text-sm">
+          {MSG_ERROR_REFRESCO}
+        </p>
       )}
 
       {estadoCarga === "loading" && plants.length === 0 && (
@@ -298,7 +329,7 @@ export function Dashboard() {
             plant={plant} 
             onEdit={() => void openEditModal(plant)}
             onDelete={() => openDeleteModal(plant)}
-            onViewDetails={() => setDetailsPlant(plant)}
+            onViewDetails={() => setDetailsId(plant.id)}
           />
         ))}
       </div>
@@ -467,7 +498,7 @@ export function Dashboard() {
               />
               <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent"></div>
               <button 
-                onClick={() => setDetailsPlant(null)}
+                onClick={() => setDetailsId(null)}
                 className="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/40 backdrop-blur-md rounded-full text-white transition-colors"
               >
                 <X size={20} />
@@ -498,36 +529,13 @@ export function Dashboard() {
               </div>
               
               <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-3 uppercase tracking-wider">Métricas Actuales</h3>
-              <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-lg"><Droplets size={18} /></div>
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Humedad Suelo</span>
-                  </div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{detailsPlant.sensors.moisture}%</span>
-                </div>
-                <div className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-amber-50 dark:bg-amber-900/20 text-amber-500 rounded-lg"><Sun size={18} /></div>
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Luz Recibida</span>
-                  </div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{detailsPlant.sensors.light}%</span>
-                </div>
-                <div className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-rose-50 dark:bg-rose-900/20 text-rose-500 rounded-lg"><Thermometer size={18} /></div>
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Temperatura</span>
-                  </div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{detailsPlant.sensors.temperature}°C</span>
-                </div>
-                <div className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-teal-50 dark:bg-teal-900/20 text-teal-500 rounded-lg"><Wind size={18} /></div>
-                    <span className="font-medium text-slate-700 dark:text-slate-200">Humedad Ambiental</span>
-                  </div>
-                  <span className="font-bold text-slate-800 dark:text-slate-100">{detailsPlant.sensors.humidity}%</span>
-                </div>
+              <EstadoMonitoreo plant={detailsPlant} />
+              <div className="space-y-3 mt-3">
+                <MetricaDetalle icono={<Droplets size={18} />} clase="bg-blue-50 dark:bg-blue-900/20 text-blue-500" etiqueta="Humedad del suelo" valor={formatearValor(detailsPlant.lectura?.moisture ?? null, "%")} />
+                <MetricaDetalle icono={<Sun size={18} />} clase="bg-amber-50 dark:bg-amber-900/20 text-amber-500" etiqueta="Luz recibida" valor={formatearValor(detailsPlant.lectura?.light ?? null, "%")} />
+                <MetricaDetalle icono={<Thermometer size={18} />} clase="bg-rose-50 dark:bg-rose-900/20 text-rose-500" etiqueta="Temperatura" valor={formatearValor(detailsPlant.lectura?.temperature ?? null, "°C")} />
               </div>
+              <TextoLectura plant={detailsPlant} />
             </div>
           </div>
         </div>
@@ -550,10 +558,11 @@ function SummaryCard({ title, value, icon, bgColor }: { title: string, value: st
   );
 }
 
-// Insignia de estado de la tarjeta. Los textos de warning se revisan en PLAN-39/48 con las lecturas reales.
+// Insignia de estado de la tarjeta. warning dice "Requiere atención" porque puede venir de la humedad,
+// la temperatura o la luz (PLAN-46), no solo de la falta de agua (decisión de PO, 21/10/2026).
 const INSIGNIA_ESTADO: Record<Plant["status"], { texto: string; clase: string; Icono: typeof CheckCircle2 }> = {
   healthy: { texto: "Saludable", clase: "bg-emerald-500/90 text-white", Icono: CheckCircle2 },
-  warning: { texto: "Necesita Agua", clase: "bg-amber-500/90 text-white", Icono: AlertCircle },
+  warning: { texto: "Requiere atención", clase: "bg-amber-500/90 text-white", Icono: AlertCircle },
   critical: { texto: "Estado Crítico", clase: "bg-red-600/90 text-white", Icono: AlertTriangle },
 };
 
@@ -561,7 +570,7 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
   const insignia = INSIGNIA_ESTADO[plant.status];
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-green-100/60 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all duration-300">
+    <article aria-label={plant.name} className="bg-white dark:bg-slate-900 rounded-3xl border border-green-100/60 dark:border-slate-800 shadow-sm overflow-hidden flex flex-col group hover:shadow-md transition-all duration-300">
       {/* Header / Image Area */}
       <div className="h-48 relative overflow-hidden bg-slate-100 dark:bg-slate-800">
         <ImageWithFallback 
@@ -603,34 +612,33 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
         </div>
       </div>
 
-      {/* Sensor Data */}
+      {/* Datos de los sensores (PLAN-39): última lectura real de la API, solo las 3 variables medidas */}
       <div className="p-5 flex-1 flex flex-col">
-        <div className="grid grid-cols-2 gap-y-4 gap-x-3 mb-5">
-          <SensorItem 
-            icon={<Droplets size={16} />} 
-            label="Humedad" 
-            value={`${plant.sensors.moisture}%`} 
-            color="blue"
-            isLow={plant.sensors.moisture < 30}
-          />
-          <SensorItem 
-            icon={<Sun size={16} />} 
-            label="Luz" 
-            value={`${plant.sensors.light}%`} 
-            color="amber"
-          />
-          <SensorItem 
-            icon={<Thermometer size={16} />} 
-            label="Temp." 
-            value={`${plant.sensors.temperature}°C`} 
-            color="rose"
-          />
-          <SensorItem 
-            icon={<Wind size={16} />} 
-            label="Ambiente" 
-            value={`${plant.sensors.humidity}%`} 
-            color="teal"
-          />
+        {/* mb-4: separa "Última lectura" de la línea de "Último riego" cuando la tarjeta no tiene espacio libre */}
+        <div className="mb-4">
+          <EstadoMonitoreo plant={plant} />
+          <div className="grid grid-cols-3 gap-3 mt-4">
+            <SensorItem
+              icon={<Droplets size={16} />}
+              label="Humedad"
+              value={formatearValor(plant.lectura?.moisture ?? null, "%")}
+              color="blue"
+              isLow={plant.lectura?.moisture != null && plant.lectura.moisture < 30}
+            />
+            <SensorItem
+              icon={<Sun size={16} />}
+              label="Luz"
+              value={formatearValor(plant.lectura?.light ?? null, "%")}
+              color="amber"
+            />
+            <SensorItem
+              icon={<Thermometer size={16} />}
+              label="Temp."
+              value={formatearValor(plant.lectura?.temperature ?? null, "°C")}
+              color="rose"
+            />
+          </div>
+          <TextoLectura plant={plant} />
         </div>
 
         <div className="mt-auto pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-sm">
@@ -638,6 +646,60 @@ function PlantCard({ plant, onEdit, onDelete, onViewDetails }: { plant: Plant; o
           <button onClick={onViewDetails} className="text-emerald-600 dark:text-emerald-400 font-semibold hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors">Ver Detalles</button>
         </div>
       </div>
+    </article>
+  );
+}
+
+// Estado del dispositivo y aviso de "sin datos en tiempo real" (PLAN-39, criterio de PLAN-11).
+// Los dos valores los calcula el backend con la hora de SQL Server.
+function EstadoMonitoreo({ plant }: { plant: Plant }) {
+  const { lectura, dispositivo } = plant;
+  const base = "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium";
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {dispositivo === null ? (
+        <span className={`${base} bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400`}>
+          {TEXTO_SIN_SENSOR}
+        </span>
+      ) : dispositivo.conectado ? (
+        <span className={`${base} bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400`}>
+          <Wifi size={14} aria-hidden="true" />
+          {TEXTO_CONECTADO}
+        </span>
+      ) : (
+        <span className={`${base} bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300`}>
+          <WifiOff size={14} aria-hidden="true" />
+          {TEXTO_DESCONECTADO}
+        </span>
+      )}
+      {lectura?.desactualizada && (
+        <span className={`${base} bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400`}>
+          <Clock size={14} aria-hidden="true" />
+          {TEXTO_SIN_TIEMPO_REAL}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Fecha de la última lectura o, si hay dispositivo pero aún no hay lecturas, "Esperando la primera lectura"
+function TextoLectura({ plant }: { plant: Plant }) {
+  const { lectura, dispositivo } = plant;
+  const texto = lectura !== null
+    ? textoUltimaLectura(lectura.recordedAt)
+    : dispositivo !== null ? TEXTO_ESPERANDO_LECTURA : null;
+  if (texto === null) return null;
+  return <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{texto}</p>;
+}
+
+function MetricaDetalle({ icono, clase, etiqueta, valor }: { icono: React.ReactNode; clase: string; etiqueta: string; valor: string }) {
+  return (
+    <div className="flex items-center justify-between p-3 border border-slate-100 dark:border-slate-800 rounded-xl">
+      <div className="flex items-center gap-3">
+        <div className={`p-2 rounded-lg ${clase}`}>{icono}</div>
+        <span className="font-medium text-slate-700 dark:text-slate-200">{etiqueta}</span>
+      </div>
+      <span className="font-bold text-slate-800 dark:text-slate-100">{valor}</span>
     </div>
   );
 }
@@ -647,7 +709,6 @@ function SensorItem({ icon, label, value, color, isLow }: { icon: React.ReactNod
     blue: "text-blue-500 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20",
     amber: "text-amber-500 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20",
     rose: "text-rose-500 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20",
-    teal: "text-teal-500 dark:text-teal-400 bg-teal-50 dark:bg-teal-900/20",
   };
 
   const bgClass = colorMap[color] || "text-slate-500 bg-slate-50 dark:bg-slate-800";

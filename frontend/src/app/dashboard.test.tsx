@@ -12,7 +12,7 @@ import { PlantProvider } from './contexts/PlantContext';
 import { Toaster } from './components/ui/sonner';
 import { ApiError } from './api/client';
 import { listPlants, getPlant, updatePlant, deletePlant } from './api/plants';
-import type { PlantResponse } from './api/types';
+import type { PlantListItemResponse, PlantResponse } from './api/types';
 import { MSG_GENERICO, MSG_REVISA_CAMPOS, MSG_SIN_CONEXION, MSG_TIMEOUT } from './utils/mensajesRegistro';
 import {
   MSG_ERROR_CARGA_LISTA,
@@ -40,7 +40,8 @@ const ID_MONSTRUO = 'aaaaaaaa-0000-0000-0000-000000000001';
 const ID_SERPIENTINA = 'aaaaaaaa-0000-0000-0000-000000000002';
 const ID_SUCULENTA = 'aaaaaaaa-0000-0000-0000-000000000003';
 
-const planta = (cambios: Partial<PlantResponse>): PlantResponse => ({
+// Planta como la devuelve la lista (GET /api/plants). Por defecto sin lectura ni dispositivo (PLAN-39).
+const planta = (cambios: Partial<PlantListItemResponse>): PlantListItemResponse => ({
   id: ID_MONSTRUO,
   name: 'Monstruo',
   species: 'Monstera Deliciosa',
@@ -51,6 +52,8 @@ const planta = (cambios: Partial<PlantResponse>): PlantResponse => ({
   deviceId: null,
   createdAt: '2026-10-17T10:00:00.000Z',
   updatedAt: '2026-10-17T10:00:00.000Z',
+  lastReading: null,
+  device: null,
   ...cambios,
 });
 
@@ -146,7 +149,8 @@ describe('Dashboard: lista de plantas desde la API', () => {
     expect(screen.getByText('Total Plantas')).toBeInTheDocument();
     expect(screen.getByText('Saludables')).toBeInTheDocument();
     expect(screen.getByText('Atención Req.')).toBeInTheDocument();
-    expect(screen.getByText('Sensores Activos')).toBeInTheDocument();
+    expect(screen.getByText('Dispositivos conectados')).toBeInTheDocument();
+    expect(screen.queryByText('Sensores Activos')).not.toBeInTheDocument();
   });
 
   it('los modales de editar y eliminar no están visibles al inicio', async () => {
